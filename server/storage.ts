@@ -47,6 +47,9 @@ export class SupabaseStorage implements IStorage {
 
   async initializeDefaultData() {
     try {
+      // Add a delay to ensure Supabase connection is ready
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       // First, ensure demo user exists
       const { data: demoUser, error: userError } = await this.supabase
         .from('users')
@@ -141,6 +144,7 @@ export class SupabaseStorage implements IStorage {
       }
     } catch (error) {
       console.error('Error initializing default data:', error);
+      console.log('Continuing without default data initialization...');
     }
   }
 
