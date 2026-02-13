@@ -126,10 +126,10 @@ export default function PlaylistDetailScreen() {
                   style={styles.coverArt}
                   contentFit="cover"
                 />
-                <Text style={styles.playlistName}>{playlist.name}</Text>
-                {playlist.description ? (
-                  <Text style={styles.playlistDesc}>{playlist.description}</Text>
-                ) : null}
+                <Text style={styles.playlistName} numberOfLines={2}>{playlist.name}</Text>
+                {playlist.description && (
+                  <Text style={styles.playlistDesc} numberOfLines={3}>{playlist.description}</Text>
+                )}
                 <View style={styles.metaRow}>
                   <Text style={styles.metaText}>{playlist.creatorName}</Text>
                   <View style={styles.metaDot} />

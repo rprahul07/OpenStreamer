@@ -283,13 +283,13 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 80,
-    gap: 12,
+    paddingVertical: 60,
   },
   emptyText: {
     fontFamily: 'Poppins_400Regular',
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark.textMuted,
+    textAlign: 'center',
   },
   miniPlayerContainer: {
     position: 'absolute',

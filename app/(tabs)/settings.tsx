@@ -8,6 +8,7 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  Switch,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranding } from '@/contexts/BrandingContext';
+import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import MiniPlayer from '@/components/MiniPlayer';
 import Colors from '@/constants/colors';
@@ -29,10 +31,12 @@ const ACCENT_COLORS = [
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
-  const { branding, updateBranding, resetBranding } = useBranding();
+  const { branding, updateBranding, resetBranding, isLoading: brandingLoading } = useBranding();
+  const { preferences, updatePreferences } = useUserPreferences();
   const { currentTrack } = usePlayer();
   const [appName, setAppName] = useState(branding.appName);
   const [showBranding, setShowBranding] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
 
   async function handleLogout() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -42,7 +46,7 @@ export default function SettingsScreen() {
 
   async function handleSaveBranding() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateBranding({ appName: appName.trim() || 'OpenStream' });
+    await updateBranding({ appName: appName.trim() || 'Academic Audio Platform' });
     Alert.alert('Saved', 'Branding updated successfully');
   }
 
@@ -54,14 +58,14 @@ export default function SettingsScreen() {
       quality: 0.8,
     });
     if (!result.canceled && result.assets[0]) {
-      await updateBranding({ logoUri: result.assets[0].uri });
+      await updateBranding({ appLogoUrl: result.assets[0].uri });
     }
   }
 
   async function handleResetBranding() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await resetBranding();
-    setAppName('OpenStream');
+    setAppName('Academic Audio Platform');
   }
 
   return (
@@ -89,6 +93,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* White Label Branding */}
         <Pressable
           style={styles.menuItem}
           onPress={() => setShowBranding(!showBranding)}
@@ -143,8 +148,8 @@ export default function SettingsScreen() {
             <View style={styles.brandingRow}>
               <Text style={styles.brandingLabel}>Custom Logo</Text>
               <Pressable style={styles.logoPicker} onPress={handlePickLogo}>
-                {branding.logoUri ? (
-                  <Image source={{ uri: branding.logoUri }} style={styles.logoImage} contentFit="cover" />
+                {branding.appLogoUrl ? (
+                  <Image source={{ uri: branding.appLogoUrl }} style={styles.logoImage} contentFit="cover" />
                 ) : (
                   <View style={styles.logoPlaceholder}>
                     <Ionicons name="image-outline" size={24} color={Colors.dark.textMuted} />
@@ -169,6 +174,70 @@ export default function SettingsScreen() {
               >
                 <Text style={styles.brandingResetText}>Reset to Default</Text>
               </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* User Preferences */}
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => setShowPreferences(!showPreferences)}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#FFB34720' }]}>
+            <Ionicons name="settings-outline" size={20} color="#FFB347" />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>User Preferences</Text>
+            <Text style={styles.menuSub}>Audio, notifications, and more</Text>
+          </View>
+          <Ionicons name={showPreferences ? 'chevron-up' : 'chevron-forward'} size={18} color={Colors.dark.textMuted} />
+        </Pressable>
+
+        {showPreferences && (
+          <View style={styles.preferencesPanel}>
+            <View style={styles.preferenceRow}>
+              <Text style={styles.preferenceLabel}>High Quality Audio</Text>
+              <Switch
+                value={preferences.highQualityAudio}
+                onValueChange={(value) => updatePreferences({ highQualityAudio: value })}
+                trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+              />
+            </View>
+
+            <View style={styles.preferenceRow}>
+              <Text style={styles.preferenceLabel}>Auto Play</Text>
+              <Switch
+                value={preferences.autoPlay}
+                onValueChange={(value) => updatePreferences({ autoPlay: value })}
+                trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+              />
+            </View>
+
+            <View style={styles.preferenceRow}>
+              <Text style={styles.preferenceLabel}>Show Lyrics</Text>
+              <Switch
+                value={preferences.showLyrics}
+                onValueChange={(value) => updatePreferences({ showLyrics: value })}
+                trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+              />
+            </View>
+
+            <View style={styles.preferenceRow}>
+              <Text style={styles.preferenceLabel}>Push Notifications</Text>
+              <Switch
+                value={preferences.pushNotifications}
+                onValueChange={(value) => updatePreferences({ pushNotifications: value })}
+                trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+              />
+            </View>
+
+            <View style={styles.preferenceRow}>
+              <Text style={styles.preferenceLabel}>Download over WiFi only</Text>
+              <Switch
+                value={preferences.downloadOverWifiOnly}
+                onValueChange={(value) => updatePreferences({ downloadOverWifiOnly: value })}
+                trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+              />
             </View>
           </View>
         )}
@@ -426,6 +495,25 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 15,
     color: Colors.dark.danger,
+  },
+  preferencesPanel: {
+    backgroundColor: Colors.dark.surface,
+    marginHorizontal: 20,
+    borderRadius: 14,
+    padding: 18,
+    gap: 16,
+    marginBottom: 8,
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  preferenceLabel: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 14,
+    color: Colors.dark.text,
+    flex: 1,
   },
   miniPlayerContainer: {
     position: 'absolute',

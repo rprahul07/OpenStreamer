@@ -9,6 +9,7 @@ import { queryClient } from "@/lib/query-client";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PlayerProvider } from "@/contexts/PlayerContext";
 import { BrandingProvider } from "@/contexts/BrandingContext";
+import { UserPreferencesProvider } from "@/contexts/UserPreferencesContext";
 import { StatusBar } from "expo-status-bar";
 import {
   useFonts,
@@ -67,10 +68,12 @@ export default function RootLayout() {
           <KeyboardProvider>
             <AuthProvider>
               <BrandingProvider>
-                <PlayerProvider>
-                  <StatusBar style="light" />
-                  <RootLayoutNav />
-                </PlayerProvider>
+                <UserPreferencesProvider>
+                  <PlayerProvider>
+                    <StatusBar style="light" />
+                    <RootLayoutNav />
+                  </PlayerProvider>
+                </UserPreferencesProvider>
               </BrandingProvider>
             </AuthProvider>
           </KeyboardProvider>

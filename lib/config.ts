@@ -2,7 +2,7 @@
 export const API_CONFIG = {
   // Base URL for API calls
   // Can be overridden by environment variable EXPO_PUBLIC_API_URL
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.119:5000',
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || 'http://192.168.220.40:5000',
   
   // API endpoints
   ENDPOINTS: {

@@ -19,6 +19,9 @@ export interface RegisterRequest {
   password: string;
   displayName: string;
   role?: 'admin' | 'creator' | 'listener';
+  department?: string;
+  academicYear?: number;
+  classSection?: string;
 }
 
 export interface UserResponse {
@@ -26,6 +29,11 @@ export interface UserResponse {
   username: string;
   displayName: string;
   role: 'admin' | 'creator' | 'listener';
+  academicRole?: 'TEACHER' | 'STUDENT';
+  department?: string;
+  academicYear?: number;
+  classSection?: string;
+  token?: string; // Add token field
 }
 
 class ApiClient {
@@ -42,11 +50,21 @@ class ApiClient {
     try {
       const url = `${this.baseURL}${endpoint}`;
       
+      // Get JWT token for authenticated requests
+      const token = await AsyncStorage.getItem('@openstream_token');
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> || {}),
+      };
+      
+      // Add Authorization header if token exists
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
         ...options,
       });
 
@@ -129,6 +147,33 @@ class ApiClient {
   async updateTrackPlayCount(id: string): Promise<ApiResponse<void>> {
     return this.request(`${API_CONFIG.ENDPOINTS.TRACKS.UPDATE_PLAY_COUNT}/${id}/play`, {
       method: 'POST',
+    });
+  }
+
+  // Generic HTTP methods for white labeling and settings
+  async get<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'GET',
+    });
+  }
+
+  async post<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async put<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PUT',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
+  async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'DELETE',
     });
   }
 }

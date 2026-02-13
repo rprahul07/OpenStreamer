@@ -7,6 +7,10 @@ interface User {
   username: string;
   displayName: string;
   role: 'admin' | 'creator' | 'listener';
+  academicRole?: 'TEACHER' | 'STUDENT';
+  department?: string;
+  academicYear?: number;
+  classSection?: string;
 }
 
 interface AuthContextValue {
@@ -14,13 +18,14 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (username: string, password: string, displayName: string) => Promise<{ success: boolean; error?: string }>;
+  register: (username: string, password: string, displayName: string, role?: string, department?: string, academicYear?: number, classSection?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SESSION_KEY = '@openstream_session';
+const TOKEN_KEY = '@openstream_token';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -33,8 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function loadSession() {
     try {
       const session = await AsyncStorage.getItem(SESSION_KEY);
-      if (session) {
+      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      if (session && token) {
         setUser(JSON.parse(session));
+        console.log('Session loaded for user:', JSON.parse(session).username);
       }
     } catch (e) {
       console.error('Failed to load session:', e);
@@ -57,10 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: response.data.username,
           displayName: response.data.displayName,
           role: response.data.role,
+          academicRole: response.data.academicRole,
+          department: response.data.department,
+          academicYear: response.data.academicYear,
+          classSection: response.data.classSection,
         };
         
         setUser(userData);
         await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+        if (response.data.token) {
+          await AsyncStorage.setItem(TOKEN_KEY, response.data.token);
+          console.log('Token saved for user:', userData.username);
+        }
         return { success: true };
       }
       
@@ -70,13 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function register(username: string, password: string, displayName: string) {
+  async function register(username: string, password: string, displayName: string, role?: string, department?: string, academicYear?: number, classSection?: string) {
     try {
       const response = await apiClient.register({ 
         username, 
         password, 
         displayName, 
-        role: 'creator' 
+        role: (role as 'admin' | 'creator' | 'listener') || 'creator',
+        department,
+        academicYear,
+        classSection
       });
       
       if (response.error) {
@@ -89,10 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           username: response.data.username,
           displayName: response.data.displayName,
           role: response.data.role,
+          academicRole: response.data.academicRole,
+          department: response.data.department,
+          academicYear: response.data.academicYear,
+          classSection: response.data.classSection,
         };
         
         setUser(userData);
         await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+        if (response.data.token) {
+          await AsyncStorage.setItem(TOKEN_KEY, response.data.token);
+          console.log('Token saved for user:', userData.username);
+        }
         return { success: true };
       }
       
@@ -105,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     setUser(null);
     await AsyncStorage.removeItem(SESSION_KEY);
+    await AsyncStorage.removeItem(TOKEN_KEY);
   }
 
   const value = useMemo(() => ({

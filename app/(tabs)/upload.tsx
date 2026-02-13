@@ -15,16 +15,22 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranding } from '@/contexts/BrandingContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { Playlist, Track, DEFAULT_TRACKS } from '@/lib/data';
 import { savePlaylist } from '@/lib/storage';
 import { createPlaylist, addTrackToPlaylist, type CreatePlaylistRequest } from '@/lib/playlist-api';
+import { uploadTrack } from '@/lib/track-api';
+import { API_CONFIG } from '@/lib/config';
+import Dropdown from '@/components/Dropdown';
+import { ACADEMIC_CONFIG } from '@/lib/academic-config';
 import MiniPlayer from '@/components/MiniPlayer';
 import Colors from '@/constants/colors';
 
 type SourceTab = 'upload' | 'library';
+type VisibilityType = 'PUBLIC' | 'CLASS';
 
 export default function UploadScreen() {
   const insets = useSafeAreaInsets();
@@ -33,6 +39,11 @@ export default function UploadScreen() {
   const { currentTrack } = usePlayer();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState<string | null>(null);
+  const [department, setDepartment] = useState<string | null>(null);
+  const [academicYear, setAcademicYear] = useState<number | null>(null);
+  const [classSection, setClassSection] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<VisibilityType>('PUBLIC');
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [selectedTracks, setSelectedTracks] = useState<Track[]>([]);
   const [sourceTab, setSourceTab] = useState<SourceTab>('upload');
@@ -109,38 +120,115 @@ export default function UploadScreen() {
       Alert.alert('No Tracks', 'Please add at least one track');
       return;
     }
+    if (visibility === 'CLASS' && (!department || !academicYear || !classSection)) {
+      Alert.alert('Missing Info', 'Please select department, academic year, and class section for class-specific playlists');
+      return;
+    }
     if (!user) return;
 
     setSaving(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      const playlistData: CreatePlaylistRequest & { userId: string } = {
+      // First upload tracks that need uploading
+      const uploadedTrackIds: string[] = [];
+      for (const track of selectedTracks) {
+        if (track.id.startsWith('uploaded_') && track.uri) {
+          const uploadedTrack = await uploadTrack({
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            fileUri: track.uri,
+            uploadedBy: user.id,
+            isPublic: visibility === 'PUBLIC' ? 'true' : 'false',
+            department: visibility === 'CLASS' ? (department || undefined) : undefined,
+            academicYear: visibility === 'CLASS' ? (academicYear || undefined) : undefined,
+            classSection: visibility === 'CLASS' ? (classSection || undefined) : undefined,
+            playlistId: 'temp', // Will be updated after playlist creation
+          });
+          
+          if (uploadedTrack) {
+            uploadedTrackIds.push(uploadedTrack.id);
+          }
+        } else {
+          uploadedTrackIds.push(track.id);
+        }
+      }
+
+      // Create playlist with cover image (if any)
+      // Create FormData for playlist creation (to handle cover image)
+      const formData = new FormData();
+      
+      // Add all playlist data as form fields
+      const playlistDataForForm = {
         name: name.trim(),
         description: description.trim(),
-        isPublic: "true",
+        subject: subject || undefined,
+        department: visibility === 'CLASS' ? (department || undefined) : undefined,
+        academicYear: visibility === 'CLASS' ? (academicYear || undefined) : undefined,
+        classSection: visibility === 'CLASS' ? (classSection || undefined) : undefined,
+        visibility,
+        status: 'DRAFT', // Always create as draft first
+        isPublic: visibility === 'PUBLIC' ? 'true' : 'false',
         coverUrl: coverUri || 'https://picsum.photos/seed/playlist/400/400',
         userId: user.id,
       };
 
-      const newPlaylist = await createPlaylist(playlistData);
+      // Type-safe iteration over object keys
+      (Object.keys(playlistDataForForm) as Array<keyof typeof playlistDataForForm>).forEach(key => {
+        const value = playlistDataForForm[key];
+        if (value !== undefined) {
+          formData.append(key, String(value));
+        }
+      });
+
+      // Add cover image if selected
+      if (coverUri && coverUri.startsWith('file://')) {
+        const coverFile = {
+          uri: coverUri,
+          type: 'image/jpeg',
+          name: `cover_${Date.now()}.jpg`,
+        };
+        formData.append('coverImage', coverFile as any);
+      }
+
+      // Create playlist with FormData (handles both cover upload and playlist creation)
+      const response = await fetch(`${API_CONFIG.BASE_URL}/api/playlists`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await AsyncStorage.getItem('@openstream_token')}`,
+          // Don't set Content-Type for FormData - let fetch set it with boundary
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create playlist');
+      }
+
+      const newPlaylist = await response.json();
       
       if (newPlaylist) {
         // Add selected tracks to the playlist
-        if (selectedTracks.length > 0) {
-          for (let i = 0; i < selectedTracks.length; i++) {
-            const track = selectedTracks[i];
+        if (uploadedTrackIds.length > 0) {
+          for (let i = 0; i < uploadedTrackIds.length; i++) {
+            const trackId = uploadedTrackIds[i];
             await addTrackToPlaylist(newPlaylist.id, {
-              trackId: track.id,
+              trackId,
               position: i
             });
           }
         }
         
-        Alert.alert('Success', 'Playlist created successfully!');
+        Alert.alert('Success', 'Playlist created successfully as draft!');
         // Reset form
         setName('');
         setDescription('');
+        setSubject(null);
+        setDepartment(null);
+        setAcademicYear(null);
+        setClassSection(null);
+        setVisibility('PUBLIC');
         setCoverUri(null);
         setSelectedTracks([]);
         setShowTrackPicker(false);
@@ -170,7 +258,7 @@ export default function UploadScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.headerTitle}>Create Playlist</Text>
-        <Text style={styles.headerSub}>Upload audio or pick from the library</Text>
+        <Text style={styles.headerSub} numberOfLines={2}>Upload audio or pick from the library</Text>
 
         <Pressable style={styles.coverPicker} onPress={pickCover}>
           {coverUri ? (
@@ -206,6 +294,86 @@ export default function UploadScreen() {
             numberOfLines={3}
           />
         </View>
+
+        <View style={styles.formGroup}>
+          <Dropdown
+            label="Subject (Optional)"
+            value={subject}
+            items={ACADEMIC_CONFIG.SUBJECTS.map(item => ({ value: item, label: item }))}
+            onSelect={(value) => setSubject(value as string)}
+            placeholder="Select Subject"
+            icon="book-outline"
+          />
+        </View>
+
+        <View style={styles.formGroup}>
+          <Text style={styles.label}>Visibility</Text>
+          <View style={styles.visibilityRow}>
+            <Pressable
+              style={[styles.visibilityOption, visibility === 'PUBLIC' && { backgroundColor: branding.accentColor }]}
+              onPress={() => setVisibility('PUBLIC')}
+            >
+              <Ionicons 
+                name="globe" 
+                size={20} 
+                color={visibility === 'PUBLIC' ? '#fff' : Colors.dark.textSecondary} 
+              />
+              <Text style={[styles.visibilityText, visibility === 'PUBLIC' && { color: '#fff' }]}>
+                Public
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.visibilityOption, visibility === 'CLASS' && { backgroundColor: branding.accentColor }]}
+              onPress={() => setVisibility('CLASS')}
+            >
+              <Ionicons 
+                name="people" 
+                size={20} 
+                color={visibility === 'CLASS' ? '#fff' : Colors.dark.textSecondary} 
+              />
+              <Text style={[styles.visibilityText, visibility === 'CLASS' && { color: '#fff' }]}>
+                Class
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {visibility === 'CLASS' && (
+          <>
+            <Dropdown
+              label="Department"
+              value={department}
+              items={ACADEMIC_CONFIG.DEPARTMENTS}
+              onSelect={(value) => setDepartment(value as string)}
+              placeholder="Select Department"
+              icon="business-outline"
+            />
+
+            <View style={styles.formRow}>
+              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                <Dropdown
+                  label="Academic Year"
+                  value={academicYear}
+                  items={ACADEMIC_CONFIG.YEARS}
+                  onSelect={(value) => setAcademicYear(value as number)}
+                  placeholder="Select Year"
+                  icon="calendar-outline"
+                />
+              </View>
+
+              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+                <Dropdown
+                  label="Class Section"
+                  value={classSection}
+                  items={ACADEMIC_CONFIG.DIVISIONS}
+                  onSelect={(value) => setClassSection(value as string)}
+                  placeholder="Select Section"
+                  icon="people-outline"
+                />
+              </View>
+            </View>
+          </>
+        )}
 
         <View style={styles.tracksSection}>
           <Text style={styles.label}>
@@ -509,6 +677,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 13,
     color: Colors.dark.text,
+  },
+  visibilityRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  visibilityOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.card,
+  },
+  visibilityText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 13,
+    color: Colors.dark.text,
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 16,
   },
   uploadSection: {
     gap: 16,

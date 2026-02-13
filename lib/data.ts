@@ -19,6 +19,13 @@ export interface Playlist {
   creatorName: string;
   isPublic: boolean;
   createdAt: number;
+  // New academic fields
+  subject?: string;
+  department?: string;
+  academicYear?: number;
+  classSection?: string;
+  visibility?: 'PUBLIC' | 'CLASS';
+  status?: 'DRAFT' | 'PUBLISHED';
 }
 
 export const DEFAULT_TRACKS: Track[] = [

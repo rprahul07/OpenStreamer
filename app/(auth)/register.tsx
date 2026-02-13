@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBranding } from '@/contexts/BrandingContext';
+import Dropdown from '@/components/Dropdown';
+import { ACADEMIC_CONFIG } from '@/lib/academic-config';
 import Colors from '@/constants/colors';
 
 export default function RegisterScreen() {
@@ -26,6 +28,10 @@ export default function RegisterScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [userType, setUserType] = useState<'student' | 'teacher'>('student');
+  const [department, setDepartment] = useState<string | null>(null);
+  const [academicYear, setAcademicYear] = useState<number | null>(null);
+  const [classSection, setClassSection] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -43,9 +49,28 @@ export default function RegisterScreen() {
       setError('Password must be at least 4 characters');
       return;
     }
+    
+    // Additional validation for students
+    if (userType === 'student') {
+      if (!department || !academicYear || !classSection) {
+        setError('Please select department, academic year, and class section');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
-    const result = await register(username.trim(), password, displayName.trim());
+    
+    const result = await register(
+      username.trim(), 
+      password, 
+      displayName.trim(),
+      userType === 'teacher' ? 'creator' : 'listener',
+      userType === 'student' ? (department || undefined) : undefined,
+      userType === 'student' ? (academicYear || undefined) : undefined,
+      userType === 'student' ? (classSection || undefined) : undefined
+    );
+    
     setLoading(false);
     if (result.success) {
       router.replace('/(tabs)');
@@ -141,6 +166,77 @@ export default function RegisterScreen() {
               />
             </View>
 
+            {/* User Type Selection */}
+            <View style={styles.userTypeContainer}>
+              <Text style={styles.label}>I am a:</Text>
+              <View style={styles.userTypeRow}>
+                <Pressable
+                  style={[styles.userTypeOption, userType === 'student' && { backgroundColor: branding.accentColor }]}
+                  onPress={() => setUserType('student')}
+                >
+                  <Ionicons 
+                    name="school-outline" 
+                    size={20} 
+                    color={userType === 'student' ? '#fff' : Colors.dark.textSecondary} 
+                  />
+                  <Text style={[styles.userTypeText, userType === 'student' && { color: '#fff' }]}>
+                    Student
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.userTypeOption, userType === 'teacher' && { backgroundColor: branding.accentColor }]}
+                  onPress={() => setUserType('teacher')}
+                >
+                  <Ionicons 
+                    name="person-outline" 
+                    size={20} 
+                    color={userType === 'teacher' ? '#fff' : Colors.dark.textSecondary} 
+                  />
+                  <Text style={[styles.userTypeText, userType === 'teacher' && { color: '#fff' }]}>
+                    Teacher
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Academic Information for Students */}
+            {userType === 'student' && (
+              <>
+                <Dropdown
+                  label="Department"
+                  value={department}
+                  items={ACADEMIC_CONFIG.DEPARTMENTS}
+                  onSelect={(value) => setDepartment(value as string)}
+                  placeholder="Select Department"
+                  icon="business-outline"
+                />
+
+                <View style={styles.academicRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Dropdown
+                      label="Academic Year"
+                      value={academicYear}
+                      items={ACADEMIC_CONFIG.YEARS}
+                      onSelect={(value) => setAcademicYear(value as number)}
+                      placeholder="Select Year"
+                      icon="calendar-outline"
+                    />
+                  </View>
+
+                  <View style={{ flex: 1, marginLeft: 8 }}>
+                    <Dropdown
+                      label="Class Section"
+                      value={classSection}
+                      items={ACADEMIC_CONFIG.DIVISIONS}
+                      onSelect={(value) => setClassSection(value as string)}
+                      placeholder="Select Section"
+                      icon="people-outline"
+                    />
+                  </View>
+                </View>
+              </>
+            )}
+
             <Pressable
               style={({ pressed }) => [
                 styles.registerBtn,
@@ -199,6 +295,38 @@ const styles = StyleSheet.create({
   },
   formArea: {
     gap: 14,
+  },
+  userTypeContainer: {
+    gap: 8,
+  },
+  label: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 14,
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  userTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  userTypeOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.card,
+  },
+  userTypeText: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 13,
+    color: Colors.dark.text,
+  },
+  academicRow: {
+    flexDirection: 'row',
+    gap: 16,
   },
   errorBox: {
     flexDirection: 'row',

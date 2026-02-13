@@ -1,25 +1,23 @@
-import express from "express";
-import type { Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
-import { storage } from "./storage";
-import * as fs from "fs";
-import * as path from "path";
+const express = require('express');
+const { createServer } = require('http');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 
 // Load environment variables
-require('./load-env.js');
+require('../load-env.js');
+
+// Import MVC components
+const setupRoutes = require('./routes');
+const database = require('./config/database');
 
 const app = express();
 const log = console.log;
 
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
-
-function setupCors(app: express.Application) {
+// CORS configuration
+function setupCors() {
   app.use((req, res, next) => {
-    const origins = new Set<string>();
+    const origins = new Set();
 
     if (process.env.REPLIT_DEV_DOMAIN) {
       origins.add(`https://${process.env.REPLIT_DEV_DOMAIN}`);
@@ -42,9 +40,9 @@ function setupCors(app: express.Application) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(
         "Access-Control-Allow-Methods",
-        "GET, POST, PUT, DELETE, OPTIONS",
+        "GET, POST, PUT, DELETE, OPTIONS, PATCH",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
+      res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
       res.header("Access-Control-Allow-Credentials", "true");
     }
 
@@ -56,23 +54,18 @@ function setupCors(app: express.Application) {
   });
 }
 
-function setupBodyParsing(app: express.Application) {
-  app.use(
-    express.json({
-      verify: (req, _res, buf) => {
-        req.rawBody = buf;
-      },
-    }),
-  );
-
-  app.use(express.urlencoded({ extended: false }));
+// Body parsing middleware
+function setupBodyParsing() {
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 }
 
-function setupRequestLogging(app: express.Application) {
+// Request logging
+function setupRequestLogging() {
   app.use((req, res, next) => {
     const start = Date.now();
     const path = req.path;
-    let capturedJsonResponse: Record<string, unknown> | undefined = undefined;
+    let capturedJsonResponse = undefined;
 
     const originalResJson = res.json;
     res.json = function (bodyJson, ...args) {
@@ -101,18 +94,19 @@ function setupRequestLogging(app: express.Application) {
   });
 }
 
-function getAppName(): string {
+// Static file serving for Expo
+function getAppName() {
   try {
     const appJsonPath = path.resolve(process.cwd(), "app.json");
     const appJsonContent = fs.readFileSync(appJsonPath, "utf-8");
     const appJson = JSON.parse(appJsonContent);
-    return appJson.expo?.name || "App Landing Page";
+    return appJson.expo?.name || "Stream Curator";
   } catch {
-    return "App Landing Page";
+    return "Stream Curator";
   }
 }
 
-function serveExpoManifest(platform: string, res: Response) {
+function serveExpoManifest(platform, res) {
   const manifestPath = path.resolve(
     process.cwd(),
     "static-build",
@@ -134,17 +128,7 @@ function serveExpoManifest(platform: string, res: Response) {
   res.send(manifest);
 }
 
-function serveLandingPage({
-  req,
-  res,
-  landingPageTemplate,
-  appName,
-}: {
-  req: Request;
-  res: Response;
-  landingPageTemplate: string;
-  appName: string;
-}) {
+function serveLandingPage({ req, res, landingPageTemplate, appName }) {
   const forwardedProto = req.header("x-forwarded-proto");
   const protocol = forwardedProto || req.protocol || "https";
   const forwardedHost = req.header("x-forwarded-host");
@@ -164,19 +148,33 @@ function serveLandingPage({
   res.status(200).send(html);
 }
 
-function configureExpoAndLanding(app: express.Application) {
+function configureExpoAndLanding() {
   const templatePath = path.resolve(
     process.cwd(),
     "server",
     "templates",
     "landing-page.html",
   );
-  const landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
+  
+  let landingPageTemplate;
+  try {
+    landingPageTemplate = fs.readFileSync(templatePath, "utf-8");
+  } catch (error) {
+    log("Warning: Landing page template not found, using simple fallback");
+    landingPageTemplate = `
+      <!DOCTYPE html>
+      <html>
+      <head><title>{{APP_NAME_PLACEHOLDER}}</title></head>
+      <body><h1>{{APP_NAME_PLACEHOLDER}}</h1><p>Stream Curator Academic Platform</p></body>
+      </html>
+    `;
+  }
+  
   const appName = getAppName();
 
   log("Serving static Expo files with dynamic manifest routing");
 
-  app.use((req: Request, res: Response, next: NextFunction) => {
+  app.use((req, res, next) => {
     if (req.path.startsWith("/api")) {
       return next();
     }
@@ -208,16 +206,11 @@ function configureExpoAndLanding(app: express.Application) {
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }
 
-function setupErrorHandler(app: express.Application) {
-  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
-    const error = err as {
-      status?: number;
-      statusCode?: number;
-      message?: string;
-    };
-
-    const status = error.status || error.statusCode || 500;
-    const message = error.message || "Internal Server Error";
+// Error handling
+function setupErrorHandler() {
+  app.use((err, req, res, next) => {
+    const status = err.status || err.statusCode || 500;
+    const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
 
@@ -229,21 +222,24 @@ function setupErrorHandler(app: express.Application) {
   });
 }
 
-(async () => {
-  setupCors(app);
-  setupBodyParsing(app);
-  setupRequestLogging(app);
+// Main server setup
+async function startServer() {
+  setupCors();
+  setupBodyParsing();
+  setupRequestLogging();
+  configureExpoAndLanding();
 
-  configureExpoAndLanding(app);
+  // Setup MVC routes
+  setupRoutes(app);
 
-  const server = await registerRoutes(app);
+  setupErrorHandler();
 
-  setupErrorHandler(app);
-
-  // Initialize default data in storage
-  await storage.initializeDefaultData();
+  // Initialize database
+  await database.initializeDefaultData();
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const server = createServer(app);
+
   server.listen(
     {
       port,
@@ -251,7 +247,20 @@ function setupErrorHandler(app: express.Application) {
       reusePort: true,
     },
     () => {
-      log(`express server serving on port ${port}`);
+      log(`🚀 Stream Curator Academic Platform server serving on port ${port}`);
+      log(`📚 MVC Architecture loaded`);
+      log(`☁️  S3 Integration ready`);
+      log(`🎓 Academic features enabled`);
     },
   );
-})();
+
+  return server;
+}
+
+// Start the server
+startServer().catch(error => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
+});
+
+module.exports = app;

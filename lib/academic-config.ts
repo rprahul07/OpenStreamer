@@ -1,0 +1,62 @@
+// Academic configuration for dropdowns
+export const ACADEMIC_CONFIG = {
+  DEPARTMENTS: [
+    { value: 'CSE', label: 'Computer Science Engineering' },
+    { value: 'ECE', label: 'Electronics & Communication Engineering' },
+    { value: 'EEE', label: 'Electrical & Electronics Engineering' },
+    { value: 'CIVIL', label: 'Civil Engineering' },
+    { value: 'MECH', label: 'Mechanical Engineering' },
+    { value: 'IT', label: 'Information Technology' },
+    { value: 'CHEMICAL', label: 'Chemical Engineering' },
+    { value: 'AERO', label: 'Aeronautical Engineering' },
+    { value: 'BIO', label: 'Biotechnology' },
+    { value: 'AUTO', label: 'Automobile Engineering' },
+  ],
+  
+  YEARS: [
+    { value: 1, label: '1st Year' },
+    { value: 2, label: '2nd Year' },
+    { value: 3, label: '3rd Year' },
+    { value: 4, label: '4th Year' },
+  ],
+  
+  DIVISIONS: [
+    { value: 'A', label: 'Division A' },
+    { value: 'B', label: 'Division B' },
+    { value: 'C', label: 'Division C' },
+    { value: 'D', label: 'Division D' },
+    { value: 'E', label: 'Division E' },
+    { value: 'F', label: 'Division F' },
+  ],
+  
+  SUBJECTS: [
+    'Mathematics',
+    'Physics',
+    'Chemistry',
+    'Programming Fundamentals',
+    'Data Structures',
+    'Algorithms',
+    'Database Systems',
+    'Operating Systems',
+    'Computer Networks',
+    'Software Engineering',
+    'Web Development',
+    'Mobile Development',
+    'Machine Learning',
+    'Artificial Intelligence',
+    'Cloud Computing',
+    'Cybersecurity',
+    'Digital Electronics',
+    'Circuit Theory',
+    'Power Systems',
+    'Control Systems',
+    'Thermodynamics',
+    'Fluid Mechanics',
+    'Strength of Materials',
+    'Structural Analysis',
+    'Business Management',
+    'Economics',
+    'Accounting',
+    'English Communication',
+  ]
+};
