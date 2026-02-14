@@ -4,7 +4,8 @@ export interface Track {
   artist: string;
   album: string;
   duration: number;
-  uri: string;
+  uri?: string; // Make optional for backward compatibility
+  file_url?: string; // API response field
   coverUrl: string;
   genre: string;
 }

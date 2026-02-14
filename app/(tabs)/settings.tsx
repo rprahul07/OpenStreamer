@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -22,10 +22,16 @@ import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import { usePlayer } from '@/contexts/PlayerContext';
 import MiniPlayer from '@/components/MiniPlayer';
 import Colors from '@/constants/colors';
+import { apiClient } from '@/lib/api';
 
 const ACCENT_COLORS = [
   '#00E5CC', '#FF6B6B', '#6C63FF', '#FFB347',
   '#4ECDC4', '#FF69B4', '#45B7D1', '#96CEB4',
+];
+
+const PRIMARY_COLORS = [
+  '#4F46E5', '#DC2626', '#059669', '#D97706',
+  '#7C3AED', '#DB2777', '#0891B2', '#6366F1',
 ];
 
 export default function SettingsScreen() {
@@ -34,9 +40,23 @@ export default function SettingsScreen() {
   const { branding, updateBranding, resetBranding, isLoading: brandingLoading } = useBranding();
   const { preferences, updatePreferences } = useUserPreferences();
   const { currentTrack } = usePlayer();
-  const [appName, setAppName] = useState(branding.appName);
+  
+  // Initialize state with current branding values
+  const [appName, setAppName] = useState('');
+  const [primaryColor, setPrimaryColor] = useState('#4F46E5');
+  const [accentColor, setAccentColor] = useState('#F59E0B');
+  
   const [showBranding, setShowBranding] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // Update state when branding changes from context
+  useEffect(() => {
+    console.log('Branding from context:', branding);
+    if (branding.appName) setAppName(branding.appName);
+    if (branding.primaryColor) setPrimaryColor(branding.primaryColor);
+    if (branding.accentColor) setAccentColor(branding.accentColor);
+  }, [branding]);
 
   async function handleLogout() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -45,20 +65,69 @@ export default function SettingsScreen() {
   }
 
   async function handleSaveBranding() {
+    console.log('Saving branding with state values:', {
+      appName,
+      primaryColor,
+      accentColor
+    });
+    
+    // Only save if we have actual values (not all undefined)
+    if (!appName && !primaryColor && !accentColor) {
+      console.log('Skipping save - no branding values to save');
+      return;
+    }
+    
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateBranding({ appName: appName.trim() || 'Academic Audio Platform' });
-    Alert.alert('Saved', 'Branding updated successfully');
+    await updateBranding({
+      appName: appName.trim() || 'Academic Audio Platform',
+      primaryColor,
+      accentColor,
+    });
+    Alert.alert('Saved', 'Your branding has been updated successfully');
   }
 
-  async function handlePickLogo() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      await updateBranding({ appLogoUrl: result.assets[0].uri });
+  async function handlePickLogo(type: 'logo' | 'icon' | 'splash') {
+    try {
+      setUploadingLogo(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: type === 'logo' ? [1, 1] : [16, 9],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled && result.assets[0]) {
+        console.log('Selected asset:', result.assets[0]);
+        
+        const formData = new FormData();
+        formData.append('file', {
+          uri: result.assets[0].uri,
+          type: result.assets[0].mimeType || 'image/jpeg',
+          name: result.assets[0].fileName || 'logo.jpg',
+        } as any);
+        
+        console.log('FormData created, uploading...');
+        const response = await apiClient.upload(`/api/settings/user/branding/upload/${type}`, formData);
+        
+        console.log('Upload response:', response);
+        
+        if (response.success && response.data?.url) {
+          const urlField = type === 'logo' ? 'appLogoUrl' : 'appIconUrl';
+          await updateBranding({ [urlField]: response.data.url });
+          
+          console.log('Logo uploaded, URL:', response.data.url);
+          Alert.alert('Success', `${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+        } else {
+          throw new Error(response.error || 'Upload failed');
+        }
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      Alert.alert('Error', 'Failed to upload logo. Please try again.');
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -66,6 +135,8 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await resetBranding();
     setAppName('Academic Audio Platform');
+    setPrimaryColor('#4F46E5');
+    setAccentColor('#F59E0B');
   }
 
   return (
@@ -122,22 +193,22 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.brandingRow}>
-              <Text style={styles.brandingLabel}>Accent Color</Text>
+              <Text style={styles.brandingLabel}>Primary Color</Text>
               <View style={styles.colorGrid}>
-                {ACCENT_COLORS.map(color => (
+                {PRIMARY_COLORS.map((color, index) => (
                   <Pressable
-                    key={color}
+                    key={`primary-${color}-${index}`}
                     style={[
                       styles.colorSwatch,
                       { backgroundColor: color },
-                      branding.accentColor === color && styles.colorSwatchActive,
+                      primaryColor === color && styles.colorSwatchActive,
                     ]}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      updateBranding({ accentColor: color });
+                      setPrimaryColor(color);
                     }}
                   >
-                    {branding.accentColor === color && (
+                    {primaryColor === color && (
                       <Ionicons name="checkmark" size={16} color="#fff" />
                     )}
                   </Pressable>
@@ -146,8 +217,32 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.brandingRow}>
-              <Text style={styles.brandingLabel}>Custom Logo</Text>
-              <Pressable style={styles.logoPicker} onPress={handlePickLogo}>
+              <Text style={styles.brandingLabel}>Accent Color</Text>
+              <View style={styles.colorGrid}>
+                {ACCENT_COLORS.map((color, index) => (
+                  <Pressable
+                    key={`accent-${color}-${index}`}
+                    style={[
+                      styles.colorSwatch,
+                      { backgroundColor: color },
+                      accentColor === color && styles.colorSwatchActive,
+                    ]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setAccentColor(color);
+                    }}
+                  >
+                    {accentColor === color && (
+                      <Ionicons name="checkmark" size={16} color="#fff" />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.brandingRow}>
+              <Text style={styles.brandingLabel}>App Logo</Text>
+              <Pressable style={styles.logoPicker} onPress={() => handlePickLogo('logo')}>
                 {branding.appLogoUrl ? (
                   <Image source={{ uri: branding.appLogoUrl }} style={styles.logoImage} contentFit="cover" />
                 ) : (
@@ -162,7 +257,7 @@ export default function SettingsScreen() {
               <Pressable
                 style={({ pressed }) => [
                   styles.brandingSaveBtn,
-                  { backgroundColor: branding.accentColor, opacity: pressed ? 0.8 : 1 },
+                  { backgroundColor: accentColor, opacity: pressed ? 0.8 : 1 },
                 ]}
                 onPress={handleSaveBranding}
               >

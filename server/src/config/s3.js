@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
 class S3Service {
@@ -17,6 +17,13 @@ class S3Service {
     const timestamp = Date.now();
     const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     return `audio/${department}/${academicYear}/${classSection}/${playlistId}/${timestamp}-${sanitizedName}`;
+  }
+
+  generateBrandingUploadPath(userId, type, fileName) {
+    const timestamp = Date.now();
+    const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const extension = sanitizedName.split('.').pop();
+    return `branding/${userId}/${type}/${timestamp}.${extension}`;
   }
 
   async uploadFile(fileBuffer, key, contentType) {
@@ -56,6 +63,21 @@ class S3Service {
     // Extract key from S3 URL
     const urlParts = url.split('/');
     return urlParts.slice(3).join('/'); // Remove https://bucket-name.s3.region.amazonaws.com/
+  }
+
+  async deleteFile(key) {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+      });
+
+      await this.s3Client.send(command);
+      return true;
+    } catch (error) {
+      console.error('S3 delete error:', error);
+      throw new Error('Failed to delete file from S3');
+    }
   }
 }
 

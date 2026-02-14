@@ -101,3 +101,50 @@ export const insertPlaylistTrackSchema = createInsertSchema(playlistTracks).pick
 
 export type InsertPlaylistTrack = z.infer<typeof insertPlaylistTrackSchema>;
 export type PlaylistTrack = typeof playlistTracks.$inferSelect;
+
+// User Branding Settings schema
+export const userBrandingSettings = pgTable("user_branding_settings", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: text("user_id").notNull().unique(),
+  appName: text("app_name").default("Academic Audio Platform"),
+  appLogoUrl: text("app_logo_url"),
+  appIconUrl: text("app_icon_url"),
+  splashScreenUrl: text("splash_screen_url"),
+  primaryColor: text("primary_color").default("#4F46E5"),
+  secondaryColor: text("secondary_color").default("#10B981"),
+  accentColor: text("accent_color").default("#F59E0B"),
+  backgroundColor: text("background_color").default("#FFFFFF"),
+  textColor: text("text_color").default("#1F2937"),
+  themeMode: text("theme_mode", { enum: ["light", "dark", "auto"] }).default("light"),
+  fontFamily: text("font_family"),
+  customCss: text("custom_css"),
+  footerText: text("footer_text").default("2024 Academic Audio Platform"),
+  contactEmail: text("contact_email"),
+  socialLinks: text("social_links"), // JSON string
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const insertUserBrandingSettingsSchema = createInsertSchema(userBrandingSettings).pick({
+  userId: true,
+  appName: true,
+  appLogoUrl: true,
+  appIconUrl: true,
+  splashScreenUrl: true,
+  primaryColor: true,
+  secondaryColor: true,
+  accentColor: true,
+  backgroundColor: true,
+  textColor: true,
+  themeMode: true,
+  fontFamily: true,
+  customCss: true,
+  footerText: true,
+  contactEmail: true,
+  socialLinks: true,
+});
+
+export type InsertUserBrandingSettings = z.infer<typeof insertUserBrandingSettingsSchema>;
+export type UserBrandingSettings = typeof userBrandingSettings.$inferSelect;

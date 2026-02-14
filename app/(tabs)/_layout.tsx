@@ -28,6 +28,10 @@ function NativeTabLayout() {
           <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} md="add-circle-outline" />
           <Label>Upload</Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="approval">
+          <Icon sf={{ default: "checkmark.circle", selected: "checkmark.circle.fill" }} md="checkmark-circle-outline" />
+          <Label>Approval</Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="settings">
           <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} md="settings" />
           <Label>Settings</Label>
@@ -100,6 +104,15 @@ function ClassicTabLayout() {
           title: "Upload",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "add-circle" : "add-circle-outline"} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="approval"
+        options={{
+          title: "Approval",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "checkmark-circle" : "checkmark-circle-outline"} size={22} color={color} />
           ),
         }}
       />

@@ -178,7 +178,20 @@ export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
       console.error('Failed to fetch playlist tracks:', response.error);
       return [];
     }
-    return response.data || [];
+    
+    // Map server response to frontend Track interface
+    const tracks = (response.data || []).map((track: any) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration: track.duration,
+      uri: track.file_url || track.uri, // Use file_url from API, fallback to uri for compatibility
+      coverUrl: track.cover_url,
+      genre: track.genre,
+    }));
+    
+    return tracks;
   } catch (error) {
     console.error('Error fetching playlist tracks:', error);
     return [];

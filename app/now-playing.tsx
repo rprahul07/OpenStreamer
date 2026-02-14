@@ -5,6 +5,8 @@ import {
   Pressable,
   StyleSheet,
   Platform,
+  FlatList,
+  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,11 +116,24 @@ export default function NowPlayingScreen() {
 
       <View style={styles.artworkContainer}>
         <Animated.View style={[styles.artworkWrapper, artworkStyle]}>
-          <Image
-            source={{ uri: currentTrack.coverUrl }}
-            style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE }]}
-            contentFit="cover"
-          />
+          {currentTrack.coverUrl ? (
+            <>
+              <Image
+                source={{ uri: currentTrack.coverUrl }}
+                style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE }]}
+                contentFit="cover"
+                onError={(error) => console.log('Cover image error:', error)}
+                onLoad={() => console.log('Cover image loaded for:', currentTrack.title)}
+              />
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator size="small" color={branding?.accentColor || '#007AFF'} />
+              </View>
+            </>
+          ) : (
+            <View style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE, justifyContent: 'center', alignItems: 'center' }]}>
+              <Ionicons name="musical-notes-outline" size={32} color={Colors.dark.textMuted} />
+            </View>
+          )}
         </Animated.View>
       </View>
 
@@ -135,7 +150,7 @@ export default function NowPlayingScreen() {
             <View
               style={[
                 styles.progressFill,
-                { width: `${progress * 100}%`, backgroundColor: branding.accentColor },
+                { width: `${progress * 100}%`, backgroundColor: branding?.accentColor || '#007AFF' },
               ]}
             />
             <View
@@ -143,7 +158,7 @@ export default function NowPlayingScreen() {
                 styles.progressThumb,
                 {
                   left: `${progress * 100}%`,
-                  backgroundColor: branding.accentColor,
+                  backgroundColor: branding?.accentColor || '#007AFF',
                 },
               ]}
             />
@@ -163,7 +178,7 @@ export default function NowPlayingScreen() {
           <Ionicons
             name="shuffle"
             size={22}
-            color={isShuffled ? branding.accentColor : Colors.dark.textSecondary}
+            color={isShuffled ? branding?.accentColor || '#007AFF' : Colors.dark.textSecondary}
           />
         </Pressable>
 
@@ -176,7 +191,7 @@ export default function NowPlayingScreen() {
 
         <Pressable
           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); togglePlayPause(); }}
-          style={[styles.playBtn, { backgroundColor: branding.accentColor }]}
+          style={[styles.playBtn, { backgroundColor: branding?.accentColor || '#007AFF' }]}
         >
           <Ionicons
             name={isPlaying ? 'pause' : 'play'}
@@ -200,10 +215,10 @@ export default function NowPlayingScreen() {
           <Ionicons
             name={repeatMode === 'one' ? 'repeat' : 'repeat'}
             size={22}
-            color={repeatMode !== 'off' ? branding.accentColor : Colors.dark.textSecondary}
+            color={repeatMode !== 'off' ? branding?.accentColor || '#007AFF' : Colors.dark.textSecondary}
           />
           {repeatMode === 'one' && (
-            <View style={[styles.repeatOneBadge, { backgroundColor: branding.accentColor }]}>
+            <View style={[styles.repeatOneBadge, { backgroundColor: branding?.accentColor || '#007AFF' }]}>
               <Text style={styles.repeatOneText}>1</Text>
             </View>
           )}
@@ -388,5 +403,14 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_500Medium',
     fontSize: 16,
     color: Colors.dark.textMuted,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

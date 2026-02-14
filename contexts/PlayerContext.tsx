@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useRef, useMemo, useCallback, ReactNode, useEffect } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus, AudioPlayer } from 'expo-audio';
+import { Audio } from 'expo-av';
 import { Track } from '@/lib/data';
+import { useAudioSession } from '@/hooks/useAudioSession';
 
 type RepeatMode = 'off' | 'all' | 'one';
 
@@ -34,13 +35,42 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [isLoading, setIsLoading] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  const player = useAudioPlayer(currentTrack?.uri || null);
-  const status = useAudioPlayerStatus(player);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const positionRef = useRef(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const isPlaying = status.playing;
-  const position = Math.floor((status.currentTime || 0) * 1000);
-  const duration = Math.floor((status.duration || 0) * 1000);
+  // Configure audio session for background playback
+  useAudioSession();
+
+  // Update position every second when playing
+  useEffect(() => {
+    if (isPlaying && soundRef.current) {
+      intervalRef.current = setInterval(async () => {
+        if (soundRef.current) {
+          const status = await soundRef.current.getStatusAsync();
+          if (status.isLoaded && status.positionMillis) {
+            positionRef.current = status.positionMillis;
+            setPosition(status.positionMillis);
+          }
+        }
+      }, 1000) as unknown as NodeJS.Timeout;
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isPlaying]);
 
   const queueRef = useRef(queue);
   const currentIndexRef = useRef(currentIndex);
@@ -58,20 +88,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     repeatModeRef.current = repeatMode;
   }, [repeatMode]);
 
-  useEffect(() => {
-    if (status.didJustFinish) {
-      handleTrackEnd();
-    }
-  }, [status.didJustFinish]);
-
-  function handleTrackEnd() {
+  async function handleTrackEnd() {
     const q = queueRef.current;
     const idx = currentIndexRef.current;
     const rm = repeatModeRef.current;
 
     if (rm === 'one') {
-      player.seekTo(0);
-      player.play();
+      if (soundRef.current) {
+        await soundRef.current.replayAsync();
+      }
       return;
     }
     if (idx < q.length - 1) {
@@ -79,55 +104,126 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       loadTrack(q[nextIdx], nextIdx);
     } else if (rm === 'all' && q.length > 0) {
       loadTrack(q[0], 0);
+    } else {
+      setIsPlaying(false);
     }
   }
 
-  function loadTrack(track: Track, index: number) {
+  async function loadTrack(track: Track, index: number) {
     setIsLoading(true);
+    
+    // Unload previous sound
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
+
     setCurrentTrack(track);
     setCurrentIndex(index);
+
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.uri || '' },
+        {
+          shouldPlay: true,
+          isLooping: false,
+          volume: 1.0,
+        },
+        (status) => {
+          if (status.isLoaded) {
+            setDuration(status.durationMillis || 0);
+            if (status.didJustFinish) {
+              handleTrackEnd();
+            }
+          }
+        }
+      );
+
+      soundRef.current = sound;
+      setIsPlaying(true);
+      
+      // Set up media session for notification controls
+      await sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded) {
+          setPosition(status.positionMillis || 0);
+          setDuration(status.durationMillis || 0);
+          setIsPlaying(status.isPlaying || false);
+          
+          if (status.didJustFinish) {
+            handleTrackEnd();
+          }
+        }
+      });
+
+      // Update media session metadata for notification controls
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.log('Error updating audio mode for media session:', error);
+      }
+
+    } catch (error) {
+      console.error('Error loading track:', error);
+      setIsLoading(false);
+    }
+
     setTimeout(() => {
       setIsLoading(false);
     }, 500);
   }
 
-  useEffect(() => {
-    if (currentTrack && player) {
-      player.play();
-    }
-  }, [currentTrack?.id]);
-
-  const playTrack = useCallback((track: Track, playlist?: Track[]) => {
+  const playTrack = useCallback(async (track: Track, playlist?: Track[]) => {
     const newQueue = playlist || [track];
     const idx = newQueue.findIndex(t => t.id === track.id);
     setQueue(newQueue);
     setOriginalQueue(newQueue);
-    loadTrack(track, idx >= 0 ? idx : 0);
+    await loadTrack(track, idx >= 0 ? idx : 0);
   }, []);
 
-  const playPlaylist = useCallback((tracks: Track[], startIndex = 0) => {
+  const playPlaylist = useCallback(async (tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
     setQueue(tracks);
     setOriginalQueue(tracks);
-    loadTrack(tracks[startIndex], startIndex);
+    await loadTrack(tracks[startIndex], startIndex);
   }, []);
 
-  const togglePlayPause = useCallback(() => {
-    if (!player) return;
-    if (isPlaying) {
-      player.pause();
-    } else {
-      player.play();
+  const togglePlayPause = useCallback(async () => {
+    if (!soundRef.current) return;
+    
+    try {
+      const status = await soundRef.current.getStatusAsync();
+      if (status.isLoaded) {
+        if (status.isPlaying) {
+          await soundRef.current.pauseAsync();
+          setIsPlaying(false);
+        } else {
+          await soundRef.current.playAsync();
+          setIsPlaying(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling play/pause:', error);
     }
-  }, [player, isPlaying]);
+  }, []);
 
-  const seekTo = useCallback((pos: number) => {
-    if (player) {
-      player.seekTo(pos / 1000);
+  const seekTo = useCallback(async (pos: number) => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.setPositionAsync(pos);
+        setPosition(pos);
+      } catch (error) {
+        console.error('Error seeking:', error);
+      }
     }
-  }, [player]);
+  }, []);
 
-  const playNext = useCallback(() => {
+  const playNext = useCallback(async () => {
     const q = queueRef.current;
     const idx = currentIndexRef.current;
     const rm = repeatModeRef.current;
@@ -137,24 +233,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       nextIdx = rm === 'all' ? 0 : q.length - 1;
       if (rm !== 'all') return;
     }
-    loadTrack(q[nextIdx], nextIdx);
+    await loadTrack(q[nextIdx], nextIdx);
   }, []);
 
-  const playPrevious = useCallback(() => {
+  const playPrevious = useCallback(async () => {
     const q = queueRef.current;
     const idx = currentIndexRef.current;
     const rm = repeatModeRef.current;
     if (q.length === 0) return;
-    if (position > 3000) {
-      seekTo(0);
+    if (positionRef.current > 3000) {
+      await seekTo(0);
       return;
     }
     let prevIdx = idx - 1;
     if (prevIdx < 0) {
       prevIdx = rm === 'all' ? q.length - 1 : 0;
     }
-    loadTrack(q[prevIdx], prevIdx);
-  }, [position]);
+    await loadTrack(q[prevIdx], prevIdx);
+  }, [seekTo]);
 
   const toggleShuffle = useCallback(() => {
     setIsShuffled(prev => {

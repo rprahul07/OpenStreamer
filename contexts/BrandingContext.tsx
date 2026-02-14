@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '@/lib/api';
 import { API_CONFIG } from '@/lib/config';
+import { useAuth } from './AuthContext';
 
 interface BrandingSettings {
   appName: string;
@@ -43,48 +44,52 @@ const DEFAULT_BRANDING: BrandingSettings = {
 };
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [branding, setBranding] = useState<BrandingSettings>(DEFAULT_BRANDING);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    loadBranding();
-  }, []);
+    if (user) {
+      loadBranding();
+    }
+  }, [user]);
 
   async function loadBranding() {
     try {
-      // Try to load from API first
-      const response = await apiClient.get('/api/settings/branding');
+      // Try to load user-specific branding from API first
+      const response = await apiClient.get('/api/settings/user/branding');
       
       if (response.data) {
         const apiBranding = response.data as any;
         const mergedBranding = {
           ...DEFAULT_BRANDING,
           ...apiBranding,
-          // Handle color field name differences
-          primaryColor: (apiBranding as any).primary_color || (apiBranding as any).primaryColor || DEFAULT_BRANDING.primaryColor,
-          secondaryColor: (apiBranding as any).secondary_color || (apiBranding as any).secondaryColor || DEFAULT_BRANDING.secondaryColor,
-          accentColor: (apiBranding as any).accent_color || (apiBranding as any).accentColor || DEFAULT_BRANDING.accentColor,
-          backgroundColor: (apiBranding as any).background_color || (apiBranding as any).backgroundColor || DEFAULT_BRANDING.backgroundColor,
-          textColor: (apiBranding as any).text_color || (apiBranding as any).textColor || DEFAULT_BRANDING.textColor,
-          themeMode: (apiBranding as any).theme_mode || (apiBranding as any).themeMode || DEFAULT_BRANDING.themeMode,
-          appLogoUrl: (apiBranding as any).app_logo_url || (apiBranding as any).appLogoUrl,
-          appIconUrl: (apiBranding as any).app_icon_url || (apiBranding as any).appIconUrl,
-          splashScreenUrl: (apiBranding as any).splash_screen_url || (apiBranding as any).splashScreenUrl,
-          fontFamily: (apiBranding as any).font_family || (apiBranding as any).fontFamily,
-          footerText: (apiBranding as any).footer_text || (apiBranding as any).footerText,
-          contactEmail: (apiBranding as any).contact_email || (apiBranding as any).contactEmail,
-          socialLinks: (apiBranding as any).social_links || (apiBranding as any).socialLinks,
+          // Handle field name conversions
+          appName: apiBranding.app_name || DEFAULT_BRANDING.appName,
+          appLogoUrl: apiBranding.app_logo_url,
+          appIconUrl: apiBranding.app_icon_url,
+          splashScreenUrl: apiBranding.splash_screen_url,
+          primaryColor: apiBranding.primary_color || DEFAULT_BRANDING.primaryColor,
+          secondaryColor: apiBranding.secondary_color || DEFAULT_BRANDING.secondaryColor,
+          accentColor: apiBranding.accent_color || DEFAULT_BRANDING.accentColor,
+          backgroundColor: apiBranding.background_color || DEFAULT_BRANDING.backgroundColor,
+          textColor: apiBranding.text_color || DEFAULT_BRANDING.textColor,
+          themeMode: apiBranding.theme_mode || DEFAULT_BRANDING.themeMode,
+          fontFamily: apiBranding.font_family,
+          footerText: apiBranding.footer_text || DEFAULT_BRANDING.footerText,
+          contactEmail: apiBranding.contact_email,
+          socialLinks: apiBranding.social_links ? JSON.parse(apiBranding.social_links) : DEFAULT_BRANDING.socialLinks,
         };
         
         setBranding(mergedBranding);
-        await AsyncStorage.setItem('@branding_settings', JSON.stringify(mergedBranding));
+        await AsyncStorage.setItem(`@branding_settings_${user!.id}`, JSON.stringify(mergedBranding));
       }
     } catch (error) {
-      console.log('Failed to load branding from API, using cache:', error);
+      console.log('Failed to load user branding from API, using cache:', error);
       
       // Fallback to cached branding
       try {
-        const cached = await AsyncStorage.getItem('@branding_settings');
+        const cached = await AsyncStorage.getItem(`@branding_settings_${user!.id}`);
         if (cached) {
           setBranding(JSON.parse(cached));
         }
@@ -102,7 +107,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       
       // Update locally immediately for responsiveness
       setBranding(newBranding);
-      await AsyncStorage.setItem('@branding_settings', JSON.stringify(newBranding));
+      await AsyncStorage.setItem(`@branding_settings_${user!.id}`, JSON.stringify(newBranding));
       
       // Try to update on backend
       try {
@@ -121,12 +126,12 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
           custom_css: newBranding.customCss,
           footer_text: newBranding.footerText,
           contact_email: newBranding.contactEmail,
-          social_links: newBranding.socialLinks,
+          social_links: typeof newBranding.socialLinks === 'object' ? JSON.stringify(newBranding.socialLinks) : newBranding.socialLinks,
         };
         
-        await apiClient.put('/api/settings/branding', apiUpdates);
+        await apiClient.put('/api/settings/user/branding', apiUpdates);
       } catch (apiError) {
-        console.error('Failed to update branding on backend:', apiError);
+        console.error('Failed to update user branding on backend:', apiError);
         // Continue with local update even if backend fails
       }
     } catch (error) {
@@ -137,11 +142,11 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   async function resetBranding() {
     try {
       setBranding(DEFAULT_BRANDING);
-      await AsyncStorage.setItem('@branding_settings', JSON.stringify(DEFAULT_BRANDING));
+      await AsyncStorage.setItem(`@branding_settings_${user!.id}`, JSON.stringify(DEFAULT_BRANDING));
       
       // Try to reset on backend
       try {
-        await apiClient.put('/api/settings/branding', {
+        await apiClient.put('/api/settings/user/branding', {
           app_name: DEFAULT_BRANDING.appName,
           primary_color: DEFAULT_BRANDING.primaryColor,
           secondary_color: DEFAULT_BRANDING.secondaryColor,
@@ -151,7 +156,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
           theme_mode: DEFAULT_BRANDING.themeMode,
         });
       } catch (apiError) {
-        console.error('Failed to reset branding on backend:', apiError);
+        console.error('Failed to reset user branding on backend:', apiError);
       }
     } catch (error) {
       console.error('Failed to reset branding:', error);

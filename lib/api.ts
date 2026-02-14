@@ -171,10 +171,59 @@ class ApiClient {
     });
   }
 
+  async patch<T = any>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    });
+  }
+
   async delete<T = any>(endpoint: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, {
       method: 'DELETE',
     });
+  }
+
+  // Special method for file uploads (multipart/form-data)
+  async upload<T = any>(endpoint: string, formData: FormData): Promise<ApiResponse<T>> {
+    try {
+      const url = `${this.baseURL}${endpoint}`;
+      
+      // Get JWT token for authenticated requests
+      const token = await AsyncStorage.getItem('@openstream_token');
+      
+      const headers: Record<string, string> = {};
+      
+      // Add Authorization header if token exists
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
+      // Don't set Content-Type for FormData - let the browser set it with boundary
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      const text = await response.text();
+      const data = JSON.parse(text);
+
+      if (!response.ok) {
+        return {
+          error: data.error || data.message || `HTTP ${response.status}`,
+        };
+      }
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : 'Network error',
+      };
+    }
   }
 }
 

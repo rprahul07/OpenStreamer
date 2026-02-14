@@ -39,10 +39,9 @@ export default function LibraryScreen() {
   const loadData = useCallback(async () => {
     if (!user) return;
     
-    // Load user playlists from server
+    // Load all playlists from server
     const serverPlaylists = await getPlaylists();
-    const userServerPlaylists = serverPlaylists.filter(p => p.creatorId === user.id);
-    setUserPlaylists(userServerPlaylists);
+    setUserPlaylists(serverPlaylists);
     
     // Load favorites from local storage (keep this local)
     const favIds = await getFavorites(user.id);
@@ -139,7 +138,7 @@ export default function LibraryScreen() {
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="musical-notes-outline" size={48} color={Colors.dark.textMuted} />
-              <Text style={styles.emptyText}>No playlists yet</Text>
+              <Text style={styles.emptyText}>No playlists available</Text>
               <Text style={styles.emptySubtext}>Create your first playlist in the Upload tab</Text>
             </View>
           }

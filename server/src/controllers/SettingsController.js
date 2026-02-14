@@ -1,4 +1,5 @@
 const database = require('../config/database');
+const s3Service = require('../config/s3');
 
 class SettingsController {
   // Get branding settings
@@ -242,6 +243,146 @@ class SettingsController {
     } catch (error) {
       console.error('Update app settings error:', error);
       res.status(500).json({ error: 'Failed to update app settings' });
+    }
+  }
+
+  // Get user branding settings
+  static async getUserBrandingSettings(req, res) {
+    try {
+      const { data, error } = await database.supabase
+        .from('user_branding_settings')
+        .select('*')
+        .eq('user_id', req.user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+        console.error('Get user branding settings error:', error);
+        return res.status(500).json({ error: 'Failed to get user branding settings' });
+      }
+      
+      // Return default branding if none found
+      const branding = data || {
+        app_name: 'Academic Audio Platform',
+        primary_color: '#4F46E5',
+        secondary_color: '#10B981',
+        accent_color: '#F59E0B',
+        background_color: '#FFFFFF',
+        text_color: '#1F2937',
+        theme_mode: 'light',
+        footer_text: '2024 Academic Audio Platform',
+        social_links: {}
+      };
+      
+      res.json(branding);
+    } catch (error) {
+      console.error('Get user branding settings error:', error);
+      res.status(500).json({ error: 'Failed to get user branding settings' });
+    }
+  }
+
+  // Update user branding settings
+  static async updateUserBrandingSettings(req, res) {
+    try {
+      const { 
+        appName, appLogoUrl,
+        primaryColor, accentColor
+      } = req.body;
+      
+      const brandingData = {
+        user_id: req.user.id,
+        app_name: appName,
+        app_logo_url: appLogoUrl,
+        primary_color: primaryColor,
+        accent_color: accentColor,
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Updating user branding with data:', brandingData);
+      
+      const { data, error } = await database.supabase
+        .from('user_branding_settings')
+        .upsert(brandingData, {
+          onConflict: 'user_id',
+          ignoreDuplicates: false
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Update user branding settings error:', error);
+        return res.status(500).json({ error: 'Failed to update user branding settings' });
+      }
+      
+      console.log('User branding updated successfully:', data);
+      res.json(data);
+    } catch (error) {
+      console.error('Update user branding settings error:', error);
+      res.status(500).json({ error: 'Failed to update user branding settings' });
+    }
+  }
+
+  // Upload branding asset (logo, icon, splash screen)
+  static async uploadBrandingAsset(req, res) {
+    try {
+      console.log('Upload request received:', {
+        type: req.params.type,
+        file: req.file ? 'present' : 'missing',
+        user: req.user?.id
+      });
+
+      const { type } = req.params; // 'logo', 'icon', or 'splash'
+      const file = req.file;
+      
+      if (!file) {
+        console.error('No file uploaded in request');
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+      
+      if (!['logo', 'icon', 'splash'].includes(type)) {
+        console.error('Invalid asset type:', type);
+        return res.status(400).json({ error: 'Invalid asset type. Must be logo, icon, or splash' });
+      }
+      
+      // Generate S3 key
+      const key = s3Service.generateBrandingUploadPath(req.user.id, type, file.originalname);
+      console.log('Generated S3 key:', key);
+      
+      // Upload to S3
+      const fileUrl = await s3Service.uploadFile(file.buffer, key, file.mimetype);
+      console.log('File uploaded to S3:', fileUrl);
+      
+      const response = { 
+        url: fileUrl,
+        type: type,
+        key: key
+      };
+      
+      console.log('Sending response:', response);
+      res.json(response);
+    } catch (error) {
+      console.error('Upload branding asset error:', error);
+      res.status(500).json({ error: 'Failed to upload branding asset' });
+    }
+  }
+
+  // Delete branding asset
+  static async deleteBrandingAsset(req, res) {
+    try {
+      const { type } = req.params;
+      const { url } = req.body;
+      
+      if (!url) {
+        return res.status(400).json({ error: 'No URL provided' });
+      }
+      
+      // Extract key from URL and delete from S3
+      const key = s3Service.extractKeyFromUrl(url);
+      await s3Service.deleteFile(key);
+      
+      res.json({ message: 'Asset deleted successfully' });
+    } catch (error) {
+      console.error('Delete branding asset error:', error);
+      res.status(500).json({ error: 'Failed to delete branding asset' });
     }
   }
 }

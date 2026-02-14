@@ -23,6 +23,9 @@ class DatabaseService {
       // Add a delay to ensure Supabase connection is ready
       await new Promise(resolve => setTimeout(resolve, 2000));
       
+      // Create user_branding_settings table if it doesn't exist
+      await this.createUserBrandingSettingsTable();
+      
       // First, ensure demo user exists
       const { data: demoUser, error: userError } = await this.supabase
         .from('users')
@@ -168,6 +171,113 @@ class DatabaseService {
       }
     } catch (error) {
       console.error('Error initializing default data:', error);
+    }
+  }
+
+  async createUserBrandingSettingsTable() {
+    try {
+      // Using raw SQL to create the table since Drizzle isn't set up for this
+      const { error } = await this.supabase.rpc('exec_sql', {
+        sql: `
+          CREATE TABLE IF NOT EXISTS public.user_branding_settings (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id TEXT NOT NULL UNIQUE,
+              app_name TEXT DEFAULT 'Academic Audio Platform',
+              app_logo_url TEXT,
+              app_icon_url TEXT,
+              splash_screen_url TEXT,
+              primary_color TEXT DEFAULT '#4F46E5',
+              secondary_color TEXT DEFAULT '#10B981',
+              accent_color TEXT DEFAULT '#F59E0B',
+              background_color TEXT DEFAULT '#FFFFFF',
+              text_color TEXT DEFAULT '#1F2937',
+              theme_mode TEXT DEFAULT 'light' CHECK (theme_mode IN ('light', 'dark', 'auto')),
+              font_family TEXT,
+              custom_css TEXT,
+              footer_text TEXT DEFAULT '2024 Academic Audio Platform',
+              contact_email TEXT,
+              social_links TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_user_branding_settings_user_id ON public.user_branding_settings(user_id);
+          
+          ALTER TABLE public.user_branding_settings ENABLE ROW LEVEL SECURITY;
+          
+          DROP POLICY IF EXISTS "Users can view own branding settings" ON public.user_branding_settings;
+          CREATE POLICY "Users can view own branding settings" ON public.user_branding_settings
+              FOR SELECT USING (auth.uid()::text = user_id);
+          
+          DROP POLICY IF EXISTS "Users can insert own branding settings" ON public.user_branding_settings;
+          CREATE POLICY "Users can insert own branding settings" ON public.user_branding_settings
+              FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+          
+          DROP POLICY IF EXISTS "Users can update own branding settings" ON public.user_branding_settings;
+          CREATE POLICY "Users can update own branding settings" ON public.user_branding_settings
+              FOR UPDATE USING (auth.uid()::text = user_id);
+          
+          GRANT SELECT, INSERT, UPDATE ON public.user_branding_settings TO authenticated;
+          GRANT SELECT ON public.user_branding_settings TO anon;
+        `
+      });
+      
+      if (error) {
+        console.error('Error creating user_branding_settings table:', error);
+        // Try alternative approach using direct SQL
+        await this.createTableWithDirectSQL();
+      } else {
+        console.log('User branding settings table created successfully');
+      }
+    } catch (error) {
+      console.error('Error in createUserBrandingSettingsTable:', error);
+      await this.createTableWithDirectSQL();
+    }
+  }
+
+  async createTableWithDirectSQL() {
+    try {
+      console.log('Creating user_branding_settings table using direct approach...');
+      
+      // Simple table creation without RLS for now
+      const { error } = await this.supabase
+        .from('user_branding_settings')
+        .select('id')
+        .limit(1);
+      
+      if (error && error.code === 'PGRST116') {
+        // Table doesn't exist, we need to create it manually
+        console.log('Table does not exist. Please run the SQL script manually:');
+        console.log('File: setup-user-branding.sql');
+        console.log('Run this in your Supabase SQL editor:');
+        console.log(`
+          CREATE TABLE IF NOT EXISTS public.user_branding_settings (
+              id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id TEXT NOT NULL UNIQUE,
+              app_name TEXT DEFAULT 'Academic Audio Platform',
+              app_logo_url TEXT,
+              app_icon_url TEXT,
+              splash_screen_url TEXT,
+              primary_color TEXT DEFAULT '#4F46E5',
+              secondary_color TEXT DEFAULT '#10B981',
+              accent_color TEXT DEFAULT '#F59E0B',
+              background_color TEXT DEFAULT '#FFFFFF',
+              text_color TEXT DEFAULT '#1F2937',
+              theme_mode TEXT DEFAULT 'light',
+              font_family TEXT,
+              custom_css TEXT,
+              footer_text TEXT DEFAULT '2024 Academic Audio Platform',
+              contact_email TEXT,
+              social_links TEXT,
+              created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+              updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+      } else {
+        console.log('User branding settings table exists');
+      }
+    } catch (error) {
+      console.error('Error in createTableWithDirectSQL:', error);
     }
   }
 

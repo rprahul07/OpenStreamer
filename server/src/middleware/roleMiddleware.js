@@ -4,11 +4,6 @@ const requireTeacher = (req, res, next) => {
   console.log('User:', req.user);
   console.log('User role:', req.user?.academic_role || req.user?.role);
   
-  // Temporarily disable teacher restrictions for debugging
-  console.log('Teacher restrictions temporarily disabled - allowing all authenticated users');
-  return next();
-  
-  /* Original code - commented out for debugging
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required.' });
   }
@@ -20,7 +15,6 @@ const requireTeacher = (req, res, next) => {
   }
 
   next();
-  */
 };
 
 const requireStudent = (req, res, next) => {
