@@ -65,7 +65,10 @@ function setupRequestLogging() {
   app.use((req, res, next) => {
     const start = Date.now();
     const path = req.path;
+    const clientIP = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
     let capturedJsonResponse = undefined;
+
+    log(`📥 Incoming request: ${req.method} ${path} from ${clientIP}`);
 
     const originalResJson = res.json;
     res.json = function (bodyJson, ...args) {
@@ -241,11 +244,17 @@ async function startServer() {
   const server = createServer(app);
 
   server.listen(
-    port,
-    "127.0.0.1",
+    {
+      port,
+      host: "0.0.0.0",
+      reusePort: true,
+    },
     () => {
       log(`🚀 Stream Curator Academic Platform server serving on port ${port}`);
-      log(`📚 MVC Architecture loaded`);
+      log(`� Server listening on all interfaces (0.0.0.0:${port})`);
+      log(`🌐 Local access: http://localhost:${port}`);
+      log(`📱 Network access: http://192.168.1.3:${port}`);
+      log(`�� MVC Architecture loaded`);
       log(`☁️  S3 Integration ready`);
       log(`🎓 Academic features enabled`);
     },
