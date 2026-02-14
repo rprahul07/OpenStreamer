@@ -241,11 +241,8 @@ async function startServer() {
   const server = createServer(app);
 
   server.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
+    port,
+    "127.0.0.1",
     () => {
       log(`🚀 Stream Curator Academic Platform server serving on port ${port}`);
       log(`📚 MVC Architecture loaded`);
