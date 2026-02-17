@@ -43,11 +43,20 @@ export default function LibraryScreen() {
     const serverPlaylists = await getPlaylists();
     setUserPlaylists(serverPlaylists);
     
-    // Load favorites from local storage (keep this local)
+    // Load favorites from local storage
     const favIds = await getFavorites(user.id);
-    const allTracks = [...DEFAULT_TRACKS];
+    
+    // Get all tracks from DEFAULT_TRACKS and server playlists
+    const defaultTracks = [...DEFAULT_TRACKS];
+    const serverTracks = serverPlaylists.flatMap(playlist => playlist.tracks || []);
+    const allTracks = [...defaultTracks, ...serverTracks];
+    
+    // Filter for favorites and remove duplicates
     const favs = allTracks.filter(t => favIds.includes(t.id));
-    setFavTracks(favs);
+    const uniqueFavs = favs.filter((track, index, self) => 
+      index === self.findIndex(t => t.id === track.id)
+    );
+    setFavTracks(uniqueFavs);
   }, [user]);
 
   useFocusEffect(

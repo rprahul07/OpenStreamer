@@ -209,10 +209,11 @@ export default function RegisterScreen() {
                   onSelect={(value) => setDepartment(value as string)}
                   placeholder="Select Department"
                   icon="business-outline"
+                  dropdownId="department"
                 />
 
                 <View style={styles.academicRow}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
+                  <View style={styles.academicItem}>
                     <Dropdown
                       label="Academic Year"
                       value={academicYear}
@@ -220,10 +221,11 @@ export default function RegisterScreen() {
                       onSelect={(value) => setAcademicYear(value as number)}
                       placeholder="Select Year"
                       icon="calendar-outline"
+                      dropdownId="academic-year"
                     />
                   </View>
 
-                  <View style={{ flex: 1, marginLeft: 8 }}>
+                  <View style={styles.academicItem}>
                     <Dropdown
                       label="Class Section"
                       value={classSection}
@@ -231,6 +233,7 @@ export default function RegisterScreen() {
                       onSelect={(value) => setClassSection(value as string)}
                       placeholder="Select Section"
                       icon="people-outline"
+                      dropdownId="class-section"
                     />
                   </View>
                 </View>
@@ -295,6 +298,8 @@ const styles = StyleSheet.create({
   },
   formArea: {
     gap: 14,
+    position: 'relative',
+    zIndex: 1,
   },
   userTypeContainer: {
     gap: 8,
@@ -326,7 +331,11 @@ const styles = StyleSheet.create({
   },
   academicRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 8,
+    marginTop: 4,
+  },
+  academicItem: {
+    flex: 1,
   },
   errorBox: {
     flexDirection: 'row',
