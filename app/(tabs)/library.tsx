@@ -41,14 +41,36 @@ export default function LibraryScreen() {
     
     // Load all playlists from server
     const serverPlaylists = await getPlaylists();
-    setUserPlaylists(serverPlaylists);
+    
+    // Filter playlists based on user role and academic information
+    let filteredPlaylists = serverPlaylists.filter(playlist => {
+      // Only show published playlists (not drafts)
+      if (playlist.status !== 'PUBLISHED') return false;
+      
+      // Public playlists are always visible
+      if (playlist.isPublic) return true;
+      
+      // Class-specific playlists
+      if (playlist.visibility === 'CLASS') {
+        // Only show if user matches class criteria
+        return (
+          user.department === playlist.department &&
+          user.academicYear === playlist.academicYear &&
+          user.classSection === playlist.classSection
+        );
+      }
+      
+      return false;
+    });
+    
+    setUserPlaylists(filteredPlaylists);
     
     // Load favorites from local storage
     const favIds = await getFavorites(user.id);
     
     // Get all tracks from DEFAULT_TRACKS and server playlists
     const defaultTracks = [...DEFAULT_TRACKS];
-    const serverTracks = serverPlaylists.flatMap(playlist => playlist.tracks || []);
+    const serverTracks = filteredPlaylists.flatMap(playlist => playlist.tracks || []);
     const allTracks = [...defaultTracks, ...serverTracks];
     
     // Filter for favorites and remove duplicates

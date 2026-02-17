@@ -28,13 +28,12 @@ const upload = multer({
   }
 });
 
-// Public routes (that don't need authentication)
-router.get('/public', PlaylistController.getPublicPlaylists);
-router.get('/', PlaylistController.getAll); // Main playlist endpoint - works with/without auth
-router.get('/:id/tracks', PlaylistController.getTracks); // Tracks should be public for public playlists
-
 // Apply authentication middleware to all subsequent routes
 router.use(authMiddleware);
+
+// Main playlist endpoint - works with/without auth
+router.get('/', PlaylistController.getAll);
+router.get('/:id/tracks', PlaylistController.getTracks); // Tracks should be public for public playlists
 
 // Teacher approval routes (must come before :id routes to avoid conflicts)
 router.get('/pending-approval', (req, res, next) => {
