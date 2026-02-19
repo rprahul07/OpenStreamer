@@ -10,12 +10,12 @@ class SettingsController {
         .select('*')
         .eq('id', 'default')
         .single();
-      
+
       if (error) {
         console.error('Get branding settings error:', error);
         return res.status(500).json({ error: 'Failed to get branding settings' });
       }
-      
+
       res.json(data);
     } catch (error) {
       console.error('Get branding settings error:', error);
@@ -26,14 +26,14 @@ class SettingsController {
   // Update branding settings (admin only)
   static async updateBrandingSettings(req, res) {
     try {
-      const { 
+      const {
         appName, appLogoUrl, appIconUrl, splashScreenUrl,
         primaryColor, secondaryColor, accentColor,
         backgroundColor, textColor, themeMode, fontFamily,
         customCss, footerText, contactEmail, supportPhone,
         websiteUrl, socialLinks, enabledFeatures
       } = req.body;
-      
+
       const { data, error } = await database.supabase
         .from('branding_settings')
         .update({
@@ -60,12 +60,12 @@ class SettingsController {
         .eq('id', 'default')
         .select()
         .single();
-      
+
       if (error) {
         console.error('Update branding settings error:', error);
         return res.status(500).json({ error: 'Failed to update branding settings' });
       }
-      
+
       res.json(data);
     } catch (error) {
       console.error('Update branding settings error:', error);
@@ -81,12 +81,12 @@ class SettingsController {
         .select('*')
         .eq('user_id', req.user.id)
         .single();
-      
+
       if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
         console.error('Get user preferences error:', error);
         return res.status(500).json({ error: 'Failed to get user preferences' });
       }
-      
+
       // Return default preferences if none found
       const preferences = data || {
         theme: 'light',
@@ -110,7 +110,7 @@ class SettingsController {
         privacy_settings: {},
         accessibility_settings: {}
       };
-      
+
       res.json(preferences);
     } catch (error) {
       console.error('Get user preferences error:', error);
@@ -121,52 +121,79 @@ class SettingsController {
   // Update user preferences
   static async updateUserPreferences(req, res) {
     try {
-      const {
-        theme, language, notificationsEnabled, emailNotifications,
-        pushNotifications, autoPlay, highQualityAudio,
-        downloadOverWifiOnly, showLyrics, showAlbumArt,
-        crossfadeEnabled, crossfadeDuration, equalizerSettings,
-        playbackSpeed, sleepTimer, recentlyPlayedLimit,
-        favoriteGenres, blockedArtists, privacySettings,
-        accessibilitySettings
-      } = req.body;
-      
-      const preferencesData = {
-        user_id: req.user.id,
-        theme,
-        language,
-        notifications_enabled: notificationsEnabled,
-        email_notifications: emailNotifications,
-        push_notifications: pushNotifications,
-        auto_play: autoPlay,
-        high_quality_audio: highQualityAudio,
-        download_over_wifi_only: downloadOverWifiOnly,
-        show_lyrics: showLyrics,
-        show_album_art: showAlbumArt,
-        crossfade_enabled: crossfadeEnabled,
-        crossfade_duration: crossfadeDuration,
-        equalizer_settings: equalizerSettings,
-        playback_speed: playbackSpeed,
-        sleep_timer: sleepTimer,
-        recently_played_limit: recentlyPlayedLimit,
-        favorite_genres: favoriteGenres,
-        blocked_artists: blockedArtists,
-        privacy_settings: privacySettings,
-        accessibility_settings: accessibilitySettings,
-        updated_at: new Date().toISOString()
-      };
-      
-      const { data, error } = await database.supabase
+      const body = req.body;
+
+      // Accept BOTH snake_case (sent by client) AND camelCase field names.
+      const get = (snake, camel) => body[snake] !== undefined ? body[snake] : body[camel];
+
+      const userId = req.user.id;
+
+      // ── Step 1: Check if a row already exists for this user ──────────────────
+      const { data: existing, error: fetchError } = await database.supabase
         .from('user_preferences')
-        .upsert(preferencesData)
-        .select()
-        .single();
-      
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('Update user preferences fetch error:', fetchError);
+        return res.status(500).json({ error: 'Failed to update user preferences' });
+      }
+
+      const preferencesData = {
+        user_id: userId,
+        theme: get('theme', 'theme'),
+        language: get('language', 'language'),
+        notifications_enabled: get('notifications_enabled', 'notificationsEnabled'),
+        email_notifications: get('email_notifications', 'emailNotifications'),
+        push_notifications: get('push_notifications', 'pushNotifications'),
+        auto_play: get('auto_play', 'autoPlay'),
+        high_quality_audio: get('high_quality_audio', 'highQualityAudio'),
+        download_over_wifi_only: get('download_over_wifi_only', 'downloadOverWifiOnly'),
+        show_lyrics: get('show_lyrics', 'showLyrics'),
+        show_album_art: get('show_album_art', 'showAlbumArt'),
+        crossfade_enabled: get('crossfade_enabled', 'crossfadeEnabled'),
+        crossfade_duration: get('crossfade_duration', 'crossfadeDuration'),
+        equalizer_settings: get('equalizer_settings', 'equalizerSettings'),
+        playback_speed: get('playback_speed', 'playbackSpeed'),
+        sleep_timer: get('sleep_timer', 'sleepTimer'),
+        recently_played_limit: get('recently_played_limit', 'recentlyPlayedLimit'),
+        favorite_genres: get('favorite_genres', 'favoriteGenres'),
+        blocked_artists: get('blocked_artists', 'blockedArtists'),
+        privacy_settings: get('privacy_settings', 'privacySettings'),
+        accessibility_settings: get('accessibility_settings', 'accessibilitySettings'),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Remove undefined values so we only touch fields actually sent by client.
+      Object.keys(preferencesData).forEach(k => {
+        if (preferencesData[k] === undefined) delete preferencesData[k];
+      });
+
+      let data, error;
+
+      if (existing) {
+        // ── Step 2a: Row exists → UPDATE by known id ─────────────────────────
+        ({ data, error } = await database.supabase
+          .from('user_preferences')
+          .update(preferencesData)
+          .eq('id', existing.id)
+          .select()
+          .single());
+      } else {
+        // ── Step 2b: No row yet → INSERT (Supabase generates id via DEFAULT) ─
+        ({ data, error } = await database.supabase
+          .from('user_preferences')
+          .insert(preferencesData)
+          .select()
+          .single());
+      }
+
       if (error) {
         console.error('Update user preferences error:', error);
         return res.status(500).json({ error: 'Failed to update user preferences' });
       }
-      
+
       res.json(data);
     } catch (error) {
       console.error('Update user preferences error:', error);
@@ -182,12 +209,12 @@ class SettingsController {
         .select('*')
         .eq('id', 'global')
         .single();
-      
+
       if (error) {
         console.error('Get app settings error:', error);
         return res.status(500).json({ error: 'Failed to get app settings' });
       }
-      
+
       res.json(data);
     } catch (error) {
       console.error('Get app settings error:', error);
@@ -206,7 +233,7 @@ class SettingsController {
         maxPlaylistTracks, maxUserPlaylists, featuredContent,
         announcementBanner, announcementLink, announcementActive
       } = req.body;
-      
+
       const { data, error } = await database.supabase
         .from('app_settings')
         .update({
@@ -233,12 +260,12 @@ class SettingsController {
         .eq('id', 'global')
         .select()
         .single();
-      
+
       if (error) {
         console.error('Update app settings error:', error);
         return res.status(500).json({ error: 'Failed to update app settings' });
       }
-      
+
       res.json(data);
     } catch (error) {
       console.error('Update app settings error:', error);
@@ -254,12 +281,12 @@ class SettingsController {
         .select('*')
         .eq('user_id', req.user.id)
         .single();
-      
+
       if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
         console.error('Get user branding settings error:', error);
         return res.status(500).json({ error: 'Failed to get user branding settings' });
       }
-      
+
       // Return default branding if none found
       const branding = data || {
         app_name: 'Academic Audio Platform',
@@ -272,7 +299,7 @@ class SettingsController {
         footer_text: '2024 Academic Audio Platform',
         social_links: {}
       };
-      
+
       res.json(branding);
     } catch (error) {
       console.error('Get user branding settings error:', error);
@@ -283,11 +310,11 @@ class SettingsController {
   // Update user branding settings
   static async updateUserBrandingSettings(req, res) {
     try {
-      const { 
+      const {
         appName, appLogoUrl,
         primaryColor, accentColor
       } = req.body;
-      
+
       const brandingData = {
         user_id: req.user.id,
         app_name: appName,
@@ -296,9 +323,9 @@ class SettingsController {
         accent_color: accentColor,
         updated_at: new Date().toISOString()
       };
-      
+
       console.log('Updating user branding with data:', brandingData);
-      
+
       const { data, error } = await database.supabase
         .from('user_branding_settings')
         .upsert(brandingData, {
@@ -307,12 +334,12 @@ class SettingsController {
         })
         .select()
         .single();
-      
+
       if (error) {
         console.error('Update user branding settings error:', error);
         return res.status(500).json({ error: 'Failed to update user branding settings' });
       }
-      
+
       console.log('User branding updated successfully:', data);
       res.json(data);
     } catch (error) {
@@ -332,31 +359,31 @@ class SettingsController {
 
       const { type } = req.params; // 'logo', 'icon', or 'splash'
       const file = req.file;
-      
+
       if (!file) {
         console.error('No file uploaded in request');
         return res.status(400).json({ error: 'No file uploaded' });
       }
-      
+
       if (!['logo', 'icon', 'splash'].includes(type)) {
         console.error('Invalid asset type:', type);
         return res.status(400).json({ error: 'Invalid asset type. Must be logo, icon, or splash' });
       }
-      
+
       // Generate S3 key
       const key = s3Service.generateBrandingUploadPath(req.user.id, type, file.originalname);
       console.log('Generated S3 key:', key);
-      
+
       // Upload to S3
       const fileUrl = await s3Service.uploadFile(file.buffer, key, file.mimetype);
       console.log('File uploaded to S3:', fileUrl);
-      
-      const response = { 
+
+      const response = {
         url: fileUrl,
         type: type,
         key: key
       };
-      
+
       console.log('Sending response:', response);
       res.json(response);
     } catch (error) {
@@ -370,15 +397,15 @@ class SettingsController {
     try {
       const { type } = req.params;
       const { url } = req.body;
-      
+
       if (!url) {
         return res.status(400).json({ error: 'No URL provided' });
       }
-      
+
       // Extract key from URL and delete from S3
       const key = s3Service.extractKeyFromUrl(url);
       await s3Service.deleteFile(key);
-      
+
       res.json({ message: 'Asset deleted successfully' });
     } catch (error) {
       console.error('Delete branding asset error:', error);

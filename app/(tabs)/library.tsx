@@ -38,18 +38,18 @@ export default function LibraryScreen() {
 
   const loadData = useCallback(async () => {
     if (!user) return;
-    
+
     // Load all playlists from server
     const serverPlaylists = await getPlaylists();
-    
+
     // Filter playlists based on user role and academic information
     let filteredPlaylists = serverPlaylists.filter(playlist => {
       // Only show published playlists (not drafts)
       if (playlist.status !== 'PUBLISHED') return false;
-      
+
       // Public playlists are always visible
       if (playlist.isPublic) return true;
-      
+
       // Class-specific playlists
       if (playlist.visibility === 'CLASS') {
         // Only show if user matches class criteria
@@ -59,23 +59,23 @@ export default function LibraryScreen() {
           user.classSection === playlist.classSection
         );
       }
-      
+
       return false;
     });
-    
+
     setUserPlaylists(filteredPlaylists);
-    
+
     // Load favorites from local storage
     const favIds = await getFavorites(user.id);
-    
+
     // Get all tracks from DEFAULT_TRACKS and server playlists
     const defaultTracks = [...DEFAULT_TRACKS];
     const serverTracks = filteredPlaylists.flatMap(playlist => playlist.tracks || []);
     const allTracks = [...defaultTracks, ...serverTracks];
-    
+
     // Filter for favorites and remove duplicates
     const favs = allTracks.filter(t => favIds.includes(t.id));
-    const uniqueFavs = favs.filter((track, index, self) => 
+    const uniqueFavs = favs.filter((track, index, self) =>
       index === self.findIndex(t => t.id === track.id)
     );
     setFavTracks(uniqueFavs);
@@ -112,7 +112,7 @@ export default function LibraryScreen() {
           router.push({ pathname: '/playlist/[id]', params: { id: item.id } });
         }}
       >
-        <Image source={{ uri: item.coverUrl }} style={styles.playlistCover} contentFit="cover" />
+        <Image source={{ uri: item.coverUrl }} style={styles.playlistCover} contentFit="cover" recyclingKey={item.id} />
         <View style={styles.playlistInfo}>
           <Text style={styles.playlistName} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.playlistMeta}>{item.tracks.length} tracks</Text>
@@ -173,7 +173,9 @@ export default function LibraryScreen() {
               <Text style={styles.emptySubtext}>Create your first playlist in the Upload tab</Text>
             </View>
           }
-          scrollEnabled={allPlaylists.length > 0}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          maxToRenderPerBatch={8}
         />
       ) : (
         <View style={styles.favContainer}>

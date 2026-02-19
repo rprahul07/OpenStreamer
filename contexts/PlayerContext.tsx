@@ -48,8 +48,6 @@ const PlayerContext = createContext<PlayerContextValue | null>(null);
 // ─── Notification helpers (only called when !isExpoGo) ───────────────────────
 
 async function getNotifications() {
-  // Dynamic import so the module (and its push-token side-effects) only loads
-  // in environments where it is supported (dev builds, production APK).
   return import('expo-notifications');
 }
 
@@ -80,7 +78,6 @@ async function setupNotifications(): Promise<boolean> {
       });
     }
 
-    // Register interactive category with media control action buttons
     await N.setNotificationCategoryAsync(MEDIA_CATEGORY_ID, [
       {
         identifier: ACTION_PREV,
@@ -172,13 +169,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const positionRef = useRef(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const notificationReady = useRef(false);
   const currentTrackRef = useRef<Track | null>(null);
   const isPlayingRef = useRef(false);
-  const queueRef = useRef(queue);
-  const currentIndexRef = useRef(currentIndex);
-  const repeatModeRef = useRef(repeatMode);
+  const queueRef = useRef<Track[]>([]);
+  const currentIndexRef = useRef(0);
+  const repeatModeRef = useRef<RepeatMode>('off');
+  // Guard against double-firing handleTrackEnd from the status callback
+  const trackEndHandledRef = useRef(false);
 
   // Keep refs in sync with state
   useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
@@ -187,30 +186,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
-  // Configure audio session for background playback
   useAudioSession();
 
-  // ── Notification setup (skipped in Expo Go) ──────────────────────────────
+  // ── Notification setup ───────────────────────────────────────────────────
   useEffect(() => {
-    if (isExpoGo) return; // Skip entirely in Expo Go
-    setupNotifications().then((granted) => {
-      notificationReady.current = granted;
-    });
+    if (isExpoGo) return;
+    setupNotifications().then(granted => { notificationReady.current = granted; });
     return () => { dismissMediaNotification(); };
   }, []);
 
-  // ── Notification action listener (skipped in Expo Go) ───────────────────
+  // ── Notification action listener ─────────────────────────────────────────
   useEffect(() => {
     if (isExpoGo) return;
-
     let subscription: { remove: () => void } | null = null;
-
-    getNotifications().then((N) => {
-      subscription = N.addNotificationResponseReceivedListener(async (response) => {
+    getNotifications().then(N => {
+      subscription = N.addNotificationResponseReceivedListener(async response => {
         const actionId = response.actionIdentifier;
         const data = response.notification.request.content.data as any;
         if (data?.type !== 'media_player') return;
-
         switch (actionId) {
           case ACTION_PLAY_PAUSE: await handleTogglePlayPause(); break;
           case ACTION_NEXT: await handlePlayNext(); break;
@@ -219,7 +212,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       });
     });
-
     return () => { subscription?.remove(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -228,27 +220,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (isPlaying && soundRef.current) {
       intervalRef.current = setInterval(async () => {
         if (soundRef.current) {
-          const status = await soundRef.current.getStatusAsync();
-          if (status.isLoaded && status.positionMillis) {
-            positionRef.current = status.positionMillis;
-            setPosition(status.positionMillis);
-          }
+          try {
+            const status = await soundRef.current.getStatusAsync();
+            if (status.isLoaded && status.positionMillis != null) {
+              positionRef.current = status.positionMillis;
+              setPosition(status.positionMillis);
+            }
+          } catch (_) { }
         }
-      }, 1000) as unknown as NodeJS.Timeout;
+      }, 1000);
     } else {
       if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isPlaying]);
 
-  // ── Internal control functions ────────────────────────────────────────────
+  // ── Internal control helpers ──────────────────────────────────────────────
 
   async function handleStop() {
-    if (soundRef.current) {
-      await soundRef.current.stopAsync();
-      setIsPlaying(false);
-      isPlayingRef.current = false;
-    }
+    try {
+      if (soundRef.current) {
+        await soundRef.current.stopAsync();
+      }
+    } catch (_) { }
+    setIsPlaying(false);
+    isPlayingRef.current = false;
     dismissMediaNotification();
   }
 
@@ -271,27 +267,39 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           await showOrUpdateMediaNotification(currentTrackRef.current, true);
       }
     } catch (err) {
-      console.error('[Player] togglePlayPause error:', err);
+      console.warn('[Player] togglePlayPause:', err);
     }
   }
 
+  // BUG FIX: trackEndHandledRef prevents double-fire from two concurrent callbacks
   async function handleTrackEnd() {
+    if (trackEndHandledRef.current) return;
+    trackEndHandledRef.current = true;
+
     const q = queueRef.current;
     const idx = currentIndexRef.current;
     const rm = repeatModeRef.current;
 
     if (rm === 'one') {
-      if (soundRef.current) await soundRef.current.replayAsync();
+      trackEndHandledRef.current = false;
+      if (soundRef.current) {
+        try { await soundRef.current.replayAsync(); } catch (_) { }
+      }
       return;
     }
+
     if (idx < q.length - 1) {
-      loadTrack(q[idx + 1], idx + 1);
+      await loadTrack(q[idx + 1], idx + 1);
     } else if (rm === 'all' && q.length > 0) {
-      loadTrack(q[0], 0);
+      await loadTrack(q[0], 0);
     } else {
       setIsPlaying(false);
+      isPlayingRef.current = false;
       dismissMediaNotification();
     }
+
+    // Reset guard after a short delay (not immediately, to debounce rapid fires)
+    setTimeout(() => { trackEndHandledRef.current = false; }, 500);
   }
 
   async function handlePlayNext() {
@@ -313,7 +321,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const rm = repeatModeRef.current;
     if (!q.length) return;
     if (positionRef.current > 3000) {
-      if (soundRef.current) { await soundRef.current.setPositionAsync(0); setPosition(0); }
+      try {
+        if (soundRef.current) { await soundRef.current.setPositionAsync(0); }
+        setPosition(0);
+        positionRef.current = 0;
+      } catch (_) { }
       return;
     }
     let prevIdx = idx - 1;
@@ -325,53 +337,60 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   async function loadTrack(track: Track, index: number) {
     setIsLoading(true);
+    trackEndHandledRef.current = false;
 
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+    // Unload previous sound safely
+    const prevSound = soundRef.current;
+    soundRef.current = null;
+    if (prevSound) {
+      try { await prevSound.unloadAsync(); } catch (_) { }
     }
 
     setCurrentTrack(track);
     currentTrackRef.current = track;
     setCurrentIndex(index);
     setPosition(0);
+    setDuration(0);
     positionRef.current = 0;
 
     try {
+      const uri = track.uri || track.file_url || '';
+      if (!uri) {
+        console.warn('[Player] Track has no URI:', track.title);
+        setIsLoading(false);
+        return;
+      }
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: track.uri || '' },
+        { uri },
         { shouldPlay: true, isLooping: false, volume: 1.0 },
-        (status) => {
-          if (status.isLoaded) {
-            setDuration(status.durationMillis || 0);
-            if (status.didJustFinish) handleTrackEnd();
-          }
-        }
       );
 
       soundRef.current = sound;
       setIsPlaying(true);
       isPlayingRef.current = true;
 
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded) {
-          setPosition(status.positionMillis || 0);
-          setDuration(status.durationMillis || 0);
-          setIsPlaying(status.isPlaying || false);
-          isPlayingRef.current = status.isPlaying || false;
-          if (status.didJustFinish) handleTrackEnd();
-        }
+      // BUG FIX: Use ONLY setOnPlaybackStatusUpdate — don't also use the
+      // createAsync callback, which causes handleTrackEnd to fire twice.
+      sound.setOnPlaybackStatusUpdate(status => {
+        if (!status.isLoaded) return;
+        setPosition(status.positionMillis ?? 0);
+        setDuration(status.durationMillis ?? 0);
+        const playing = status.isPlaying ?? false;
+        setIsPlaying(playing);
+        isPlayingRef.current = playing;
+        if (status.didJustFinish) handleTrackEnd();
       });
 
-      // Show media notification (only in dev build / production)
       if (notificationReady.current) {
         await showOrUpdateMediaNotification(track, true);
       }
     } catch (err) {
       console.error('[Player] loadTrack error:', err);
+      setIsPlaying(false);
+    } finally {
+      setIsLoading(false);
     }
-
-    setTimeout(() => setIsLoading(false), 500);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -381,6 +400,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const idx = newQueue.findIndex(t => t.id === track.id);
     setQueue(newQueue);
     setOriginalQueue(newQueue);
+    queueRef.current = newQueue;
     await loadTrack(track, idx >= 0 ? idx : 0);
   }, []);
 
@@ -388,6 +408,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!tracks.length) return;
     setQueue(tracks);
     setOriginalQueue(tracks);
+    queueRef.current = tracks;
     await loadTrack(tracks[startIndex], startIndex);
   }, []);
 
@@ -402,7 +423,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setPosition(pos);
       positionRef.current = pos;
     } catch (err) {
-      console.error('[Player] seekTo error:', err);
+      console.warn('[Player] seekTo:', err);
     }
   }, []);
 
@@ -420,25 +441,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           const j = Math.floor(Math.random() * (i + 1));
           [rest[i], rest[j]] = [rest[j], rest[i]];
         }
-        setQueue([current, ...rest]);
+        const shuffled = [current, ...rest];
+        setQueue(shuffled);
+        queueRef.current = shuffled;
         setCurrentIndex(0);
+        currentIndexRef.current = 0;
         return true;
       } else {
         const current = q[idx];
-        const origIdx = originalQueue.findIndex(t => t.id === current.id);
-        setQueue([...originalQueue]);
-        setCurrentIndex(origIdx >= 0 ? origIdx : 0);
+        const origOrig = originalQueue; // captured in closure
+        const origIdx = origOrig.findIndex(t => t.id === current.id);
+        setQueue([...origOrig]);
+        queueRef.current = [...origOrig];
+        const newIdx = origIdx >= 0 ? origIdx : 0;
+        setCurrentIndex(newIdx);
+        currentIndexRef.current = newIdx;
         return false;
       }
     });
   }, [originalQueue]);
 
   const toggleRepeat = useCallback(() => {
-    setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
+    setRepeatMode(prev => {
+      const next = prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off';
+      repeatModeRef.current = next;
+      return next;
+    });
   }, []);
 
   const addToQueue = useCallback((track: Track) => {
-    setQueue(prev => [...prev, track]);
+    setQueue(prev => {
+      const updated = [...prev, track];
+      queueRef.current = updated;
+      return updated;
+    });
     setOriginalQueue(prev => [...prev, track]);
   }, []);
 

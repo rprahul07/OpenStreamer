@@ -48,9 +48,9 @@ class TrackApiClient {
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
     try {
-      const token = await AsyncStorage.getItem('@openstream_session');
+      const token = await AsyncStorage.getItem('@openstream_token');
       const url = `${this.baseURL}${endpoint}`;
-      
+
       const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
@@ -87,9 +87,9 @@ export const trackApiClient = new TrackApiClient();
 export async function uploadTrack(trackData: UploadTrackRequest): Promise<TrackResponse | null> {
   try {
     const token = await AsyncStorage.getItem('@openstream_token');
-    
+
     const formData = new FormData();
-    
+
     // Add required fields (these are guaranteed to be defined)
     formData.append('title', trackData.title);
     formData.append('artist', trackData.artist);
@@ -97,7 +97,7 @@ export async function uploadTrack(trackData: UploadTrackRequest): Promise<TrackR
     formData.append('uploadedBy', trackData.uploadedBy);
     formData.append('isPublic', trackData.isPublic);
     formData.append('playlistId', trackData.playlistId);
-    
+
     // Add optional fields only if they exist
     if (trackData.department) {
       formData.append('department', trackData.department);

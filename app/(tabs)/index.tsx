@@ -37,7 +37,7 @@ export default function HomeScreen() {
     if (user) {
       const recent = await getRecentlyPlayed(user.id);
       setRecentTracks(recent);
-      
+
       // Load playlists from server
       const playlists = await getPlaylists();
       setServerPlaylists(playlists);
@@ -110,7 +110,9 @@ export default function HomeScreen() {
             keyExtractor={item => item.id}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalList}
-            scrollEnabled={serverPlaylists.length > 0}
+            removeClippedSubviews
+            maxToRenderPerBatch={6}
+            initialNumToRender={4}
           />
         </View>
 
@@ -206,8 +208,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Poppins_600SemiBold',
     fontSize: 20,
     color: Colors.dark.text,
-    paddingHorizontal: 20,
-    marginBottom: 14,
+    // BUG FIX: removed paddingHorizontal/marginBottom that was doubling
+    // the indent when sectionTitle sits inside sectionHeader (which already
+    // has paddingHorizontal: 20).
   },
   horizontalList: {
     paddingHorizontal: 20,

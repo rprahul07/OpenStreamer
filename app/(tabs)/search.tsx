@@ -144,7 +144,9 @@ export default function SearchScreen() {
               </View>
             )
           }
-          scrollEnabled={results.length > 0 || trackResults.length > 0}
+          scrollEnabled
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
         />
       ) : (
         <FlatList
@@ -187,7 +189,10 @@ export default function SearchScreen() {
               <Text style={styles.browseTitle}>Browse Tracks</Text>
             </View>
           }
-          scrollEnabled={filteredTracks.length > 0}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          maxToRenderPerBatch={8}
+          initialNumToRender={6}
         />
       )}
 

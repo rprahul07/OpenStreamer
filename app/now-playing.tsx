@@ -5,7 +5,6 @@ import {
   Pressable,
   StyleSheet,
   Platform,
-  FlatList,
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
@@ -117,21 +116,21 @@ export default function NowPlayingScreen() {
       <View style={styles.artworkContainer}>
         <Animated.View style={[styles.artworkWrapper, artworkStyle]}>
           {currentTrack.coverUrl ? (
-            <>
-              <Image
-                source={{ uri: currentTrack.coverUrl }}
-                style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE }]}
-                contentFit="cover"
-                onError={(error) => console.log('Cover image error:', error)}
-                onLoad={() => console.log('Cover image loaded for:', currentTrack.title)}
-              />
-              <View style={styles.loadingOverlay}>
-                <ActivityIndicator size="small" color={branding?.accentColor || '#007AFF'} />
-              </View>
-            </>
+            <Image
+              source={{ uri: currentTrack.coverUrl }}
+              style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE }]}
+              contentFit="cover"
+              recyclingKey={currentTrack.id}
+            />
           ) : (
             <View style={[styles.artwork, { width: ARTWORK_SIZE, height: ARTWORK_SIZE, justifyContent: 'center', alignItems: 'center' }]}>
               <Ionicons name="musical-notes-outline" size={32} color={Colors.dark.textMuted} />
+            </View>
+          )}
+          {/* BUG FIX: only show loading spinner when track is loading */}
+          {isLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={branding?.accentColor || '#007AFF'} />
             </View>
           )}
         </Animated.View>

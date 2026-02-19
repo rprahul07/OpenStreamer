@@ -46,7 +46,7 @@ export async function getPlaylists(): Promise<Playlist[]> {
       console.error('Failed to fetch playlists:', response.error);
       return [];
     }
-    
+
     const serverPlaylists = response.data || [];
     // Convert each playlist to frontend format with tracks
     const convertedPlaylists = await Promise.all(
@@ -66,7 +66,7 @@ export async function getUserPlaylists(userId: string): Promise<Playlist[]> {
       console.error('Failed to fetch user playlists:', response.error);
       return [];
     }
-    
+
     const serverPlaylists = response.data || [];
     // Convert each playlist to frontend format with tracks
     const convertedPlaylists = await Promise.all(
@@ -81,7 +81,7 @@ export async function getUserPlaylists(userId: string): Promise<Playlist[]> {
 
 export async function getDraftPlaylists(): Promise<Playlist[]> {
   try {
-    const token = await AsyncStorage.getItem('@openstream_session');
+    const token = await AsyncStorage.getItem('@openstream_token');
     if (!token) return [];
 
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/playlists/drafts/my`, {
@@ -98,7 +98,7 @@ export async function getDraftPlaylists(): Promise<Playlist[]> {
 
     const data = await response.json();
     const serverPlaylists: PlaylistResponse[] = data || [];
-    
+
     // Convert each playlist to frontend format with tracks
     const convertedPlaylists = await Promise.all(
       serverPlaylists.map((playlist: PlaylistResponse) => convertServerPlaylist(playlist))
@@ -112,7 +112,7 @@ export async function getDraftPlaylists(): Promise<Playlist[]> {
 
 export async function publishPlaylist(playlistId: string): Promise<boolean> {
   try {
-    const token = await AsyncStorage.getItem('@openstream_session');
+    const token = await AsyncStorage.getItem('@openstream_token');
     if (!token) return false;
 
     const response = await fetch(`${API_CONFIG.BASE_URL}/api/playlists/${playlistId}/publish`, {
@@ -142,9 +142,9 @@ export async function getPlaylist(id: string): Promise<Playlist | null> {
       console.error('Failed to fetch playlist:', response.error);
       return null;
     }
-    
+
     if (!response.data) return null;
-    
+
     // Convert playlist to frontend format with tracks
     return await convertServerPlaylist(response.data);
   } catch (error) {
@@ -160,9 +160,9 @@ export async function createPlaylist(playlistData: CreatePlaylistRequest & { use
       console.error('Failed to create playlist:', response.error);
       return null;
     }
-    
+
     if (!response.data) return null;
-    
+
     // Convert playlist to frontend format with tracks
     return await convertServerPlaylist(response.data);
   } catch (error) {
@@ -178,7 +178,7 @@ export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
       console.error('Failed to fetch playlist tracks:', response.error);
       return [];
     }
-    
+
     // Map server response to frontend Track interface
     const tracks = (response.data || []).map((track: any) => ({
       id: track.id,
@@ -190,7 +190,7 @@ export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
       coverUrl: track.cover_url,
       genre: track.genre,
     }));
-    
+
     return tracks;
   } catch (error) {
     console.error('Error fetching playlist tracks:', error);
@@ -199,7 +199,7 @@ export async function getPlaylistTracks(playlistId: string): Promise<Track[]> {
 }
 
 export async function addTrackToPlaylist(
-  playlistId: string, 
+  playlistId: string,
   trackData: AddTrackRequest
 ): Promise<boolean> {
   try {
