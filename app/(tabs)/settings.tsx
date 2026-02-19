@@ -9,8 +9,11 @@ import {
   TextInput,
   Alert,
   Switch,
+  Modal,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -49,10 +52,12 @@ export default function SettingsScreen() {
   const [showBranding, setShowBranding] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
 
   // Update state when branding changes from context
   useEffect(() => {
-    console.log('Branding from context:', branding);
     if (branding.appName) setAppName(branding.appName);
     if (branding.primaryColor) setPrimaryColor(branding.primaryColor);
     if (branding.accentColor) setAccentColor(branding.accentColor);
@@ -65,25 +70,18 @@ export default function SettingsScreen() {
   }
 
   async function handleSaveBranding() {
-    console.log('Saving branding with state values:', {
-      appName,
-      primaryColor,
-      accentColor
-    });
-    
-    // Only save if we have actual values (not all undefined)
-    if (!appName && !primaryColor && !accentColor) {
-      console.log('Skipping save - no branding values to save');
-      return;
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await updateBranding({
+        appName: appName.trim() || branding.appName || 'Academic Audio Platform',
+        primaryColor: primaryColor || branding.primaryColor,
+        accentColor: accentColor || branding.accentColor,
+      });
+      Alert.alert('Saved', 'Your branding has been updated successfully');
+    } catch (error) {
+      console.error('Error saving branding:', error);
+      Alert.alert('Error', 'Failed to save branding. Please try again.');
     }
-    
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateBranding({
-      appName: appName.trim() || 'Academic Audio Platform',
-      primaryColor,
-      accentColor,
-    });
-    Alert.alert('Saved', 'Your branding has been updated successfully');
   }
 
   async function handlePickLogo(type: 'logo' | 'icon' | 'splash') {
@@ -339,7 +337,13 @@ export default function SettingsScreen() {
 
         <View style={styles.divider} />
 
-        <Pressable style={styles.menuItem}>
+        <Pressable 
+          style={styles.menuItem}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowNotificationsModal(true);
+          }}
+        >
           <View style={[styles.menuIcon, { backgroundColor: '#FFB34720' }]}>
             <Ionicons name="notifications-outline" size={20} color="#FFB347" />
           </View>
@@ -350,7 +354,13 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
         </Pressable>
 
-        <Pressable style={styles.menuItem}>
+        <Pressable 
+          style={styles.menuItem}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowPrivacyModal(true);
+          }}
+        >
           <View style={[styles.menuIcon, { backgroundColor: '#4ECDC420' }]}>
             <Ionicons name="shield-checkmark-outline" size={20} color="#4ECDC4" />
           </View>
@@ -361,13 +371,19 @@ export default function SettingsScreen() {
           <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
         </Pressable>
 
-        <Pressable style={styles.menuItem}>
+        <Pressable 
+          style={styles.menuItem}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowAboutModal(true);
+          }}
+        >
           <View style={[styles.menuIcon, { backgroundColor: '#00E5CC20' }]}>
             <Ionicons name="information-circle-outline" size={20} color="#00E5CC" />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>About</Text>
-            <Text style={styles.menuSub}>Version 1.0.0</Text>
+            <Text style={styles.menuSub}>Version {Constants.expoConfig?.version || '1.0.0'}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={Colors.dark.textMuted} />
         </Pressable>
@@ -386,6 +402,228 @@ export default function SettingsScreen() {
       <View style={styles.miniPlayerContainer}>
         <MiniPlayer />
       </View>
+
+      {/* Notifications Modal */}
+      <Modal
+        visible={showNotificationsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowNotificationsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Notification Settings</Text>
+              <Pressable onPress={() => setShowNotificationsModal(false)}>
+                <Ionicons name="close" size={24} color={Colors.dark.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.preferencesPanel}>
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Push Notifications</Text>
+                    <Text style={styles.preferenceDesc}>Receive push notifications</Text>
+                  </View>
+                  <Switch
+                    value={preferences.pushNotifications}
+                    onValueChange={(value) => updatePreferences({ pushNotifications: value })}
+                    trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+                  />
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Email Notifications</Text>
+                    <Text style={styles.preferenceDesc}>Receive email updates</Text>
+                  </View>
+                  <Switch
+                    value={preferences.emailNotifications}
+                    onValueChange={(value) => updatePreferences({ emailNotifications: value })}
+                    trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+                  />
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Now Playing</Text>
+                    <Text style={styles.preferenceDesc}>Show now playing notification</Text>
+                  </View>
+                  <Switch
+                    value={preferences.notificationsEnabled}
+                    onValueChange={(value) => updatePreferences({ notificationsEnabled: value })}
+                    trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+                  />
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Privacy & Security Modal */}
+      <Modal
+        visible={showPrivacyModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowPrivacyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Privacy & Security</Text>
+              <Pressable onPress={() => setShowPrivacyModal(false)}>
+                <Ionicons name="close" size={24} color={Colors.dark.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.preferencesPanel}>
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Profile Visibility</Text>
+                    <Text style={styles.preferenceDesc}>Who can see your profile</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={Colors.dark.textMuted} />
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Activity Tracking</Text>
+                    <Text style={styles.preferenceDesc}>Track listening history</Text>
+                  </View>
+                  <Switch
+                    value={preferences.privacySettings?.activityTracking !== false}
+                    onValueChange={(value) => updatePreferences({ 
+                      privacySettings: { ...preferences.privacySettings, activityTracking: value }
+                    })}
+                    trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+                  />
+                </View>
+
+                <View style={styles.preferenceRow}>
+                  <View style={styles.preferenceInfo}>
+                    <Text style={styles.preferenceLabel}>Data Collection</Text>
+                    <Text style={styles.preferenceDesc}>Allow analytics and data collection</Text>
+                  </View>
+                  <Switch
+                    value={preferences.privacySettings?.dataCollection !== false}
+                    onValueChange={(value) => updatePreferences({ 
+                      privacySettings: { ...preferences.privacySettings, dataCollection: value }
+                    })}
+                    trackColor={{ false: Colors.dark.border, true: branding.accentColor }}
+                  />
+                </View>
+
+                <Pressable 
+                  style={styles.dangerButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Delete Account',
+                      'Are you sure you want to delete your account? This action cannot be undone.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        { 
+                          text: 'Delete', 
+                          style: 'destructive',
+                          onPress: () => Alert.alert('Not Implemented', 'Account deletion will be available soon.')
+                        }
+                      ]
+                    );
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={18} color={Colors.dark.danger} />
+                  <Text style={styles.dangerButtonText}>Delete Account</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* About Modal */}
+      <Modal
+        visible={showAboutModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAboutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>About</Text>
+              <Pressable onPress={() => setShowAboutModal(false)}>
+                <Ionicons name="close" size={24} color={Colors.dark.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.aboutContent}>
+                <View style={styles.aboutLogo}>
+                  {branding.appLogoUrl ? (
+                    <Image source={{ uri: branding.appLogoUrl }} style={styles.aboutLogoImage} contentFit="contain" />
+                  ) : (
+                    <View style={[styles.aboutLogoPlaceholder, { backgroundColor: branding.accentColor + '20' }]}>
+                      <Ionicons name="musical-notes" size={48} color={branding.accentColor} />
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.aboutAppName}>{branding.appName || 'Academic Audio Platform'}</Text>
+                <Text style={styles.aboutVersion}>Version {Constants.expoConfig?.version || '1.0.0'}</Text>
+                <Text style={styles.aboutDescription}>
+                  A modern audio streaming platform for academic institutions. Stream, create, and share playlists with your community.
+                </Text>
+                
+                <View style={styles.aboutSection}>
+                  <Text style={styles.aboutSectionTitle}>User Information</Text>
+                  <View style={styles.aboutInfoRow}>
+                    <Text style={styles.aboutInfoLabel}>Username:</Text>
+                    <Text style={styles.aboutInfoValue}>@{user?.username}</Text>
+                  </View>
+                  <View style={styles.aboutInfoRow}>
+                    <Text style={styles.aboutInfoLabel}>Role:</Text>
+                    <Text style={styles.aboutInfoValue}>{user?.role || 'User'}</Text>
+                  </View>
+                  {user?.department && (
+                    <View style={styles.aboutInfoRow}>
+                      <Text style={styles.aboutInfoLabel}>Department:</Text>
+                      <Text style={styles.aboutInfoValue}>{user.department}</Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.aboutSection}>
+                  <Text style={styles.aboutSectionTitle}>Technical</Text>
+                  <View style={styles.aboutInfoRow}>
+                    <Text style={styles.aboutInfoLabel}>Platform:</Text>
+                    <Text style={styles.aboutInfoValue}>{Platform.OS}</Text>
+                  </View>
+                  <View style={styles.aboutInfoRow}>
+                    <Text style={styles.aboutInfoLabel}>Build:</Text>
+                    <Text style={styles.aboutInfoValue}>{Constants.expoConfig?.sdkVersion || 'N/A'}</Text>
+                  </View>
+                </View>
+
+                {branding.contactEmail && (
+                  <Pressable 
+                    style={[
+                      styles.contactButton,
+                      { 
+                        backgroundColor: branding.accentColor + '15',
+                        borderColor: branding.accentColor + '30',
+                      }
+                    ]}
+                    onPress={() => Linking.openURL(`mailto:${branding.contactEmail}`)}
+                  >
+                    <Ionicons name="mail-outline" size={18} color={branding.accentColor} />
+                    <Text style={[styles.contactButtonText, { color: branding.accentColor }]}>
+                      Contact Support
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -615,5 +853,145 @@ const styles = StyleSheet.create({
     bottom: 80,
     left: 0,
     right: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: Colors.dark.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  modalTitle: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 20,
+    color: Colors.dark.text,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  preferenceInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  preferenceDesc: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  dangerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.danger + '15',
+    borderWidth: 1,
+    borderColor: Colors.dark.danger + '30',
+  },
+  dangerButtonText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 14,
+    color: Colors.dark.danger,
+  },
+  aboutContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  aboutLogo: {
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  aboutLogoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  aboutLogoPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  aboutAppName: {
+    fontFamily: 'Poppins_700Bold',
+    fontSize: 24,
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  aboutVersion: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+    marginBottom: 16,
+  },
+  aboutDescription: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  aboutSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  aboutSectionTitle: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 16,
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
+  aboutInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border + '30',
+  },
+  aboutInfoLabel: {
+    fontFamily: 'Poppins_500Medium',
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+  },
+  aboutInfoValue: {
+    fontFamily: 'Poppins_400Regular',
+    fontSize: 14,
+    color: Colors.dark.text,
+  },
+  contactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  contactButtonText: {
+    fontFamily: 'Poppins_600SemiBold',
+    fontSize: 14,
   },
 });

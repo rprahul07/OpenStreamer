@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   formArea: {
     gap: 14,
     position: 'relative',
-    zIndex: 1,
+    overflow: 'visible',
   },
   userTypeContainer: {
     gap: 8,
@@ -333,9 +333,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 4,
+    overflow: 'visible',
   },
   academicItem: {
     flex: 1,
+    overflow: 'visible',
   },
   errorBox: {
     flexDirection: 'row',

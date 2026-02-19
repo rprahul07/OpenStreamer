@@ -218,25 +218,57 @@ export async function addTrackToPlaylist(
 
 // Helper function to convert server playlist to frontend format
 export async function convertServerPlaylist(serverPlaylist: PlaylistResponse): Promise<Playlist> {
+  // Some fields from the API come in snake_case from Supabase.
+  // Normalize them here so the rest of the app can rely on camelCase.
+  const anyPlaylist: any = serverPlaylist as any;
+
+  const id = anyPlaylist.id;
+  const name = anyPlaylist.name;
+  const description = anyPlaylist.description;
+
+  const coverUrl =
+    anyPlaylist.coverUrl ||
+    anyPlaylist.cover_url ||
+    'https://picsum.photos/seed/default/400/400';
+
+  const userId = anyPlaylist.userId || anyPlaylist.user_id;
+
+  const isPublicRaw = anyPlaylist.isPublic ?? anyPlaylist.is_public;
+  const isPublic =
+    typeof isPublicRaw === 'boolean'
+      ? isPublicRaw
+      : String(isPublicRaw) === 'true';
+
+  const createdAtRaw = anyPlaylist.createdAt || anyPlaylist.created_at;
+  const createdAt = createdAtRaw ? new Date(createdAtRaw).getTime() : Date.now();
+
+  // Academic / visibility fields may also be snake_case depending on source.
+  const subject = anyPlaylist.subject;
+  const department = anyPlaylist.department;
+  const academicYear = anyPlaylist.academicYear ?? anyPlaylist.academic_year;
+  const classSection = anyPlaylist.classSection ?? anyPlaylist.class_section;
+  const visibility = anyPlaylist.visibility;
+  const status = anyPlaylist.status;
+
   // Fetch tracks for this playlist
-  const tracks = await getPlaylistTracks(serverPlaylist.id);
-  
+  const tracks = await getPlaylistTracks(id);
+
   return {
-    id: serverPlaylist.id,
-    name: serverPlaylist.name,
-    description: serverPlaylist.description || '',
-    coverUrl: serverPlaylist.coverUrl || 'https://picsum.photos/seed/default/400/400',
+    id,
+    name,
+    description: description || '',
+    coverUrl,
     tracks: tracks,
-    creatorId: serverPlaylist.userId,
+    creatorId: userId,
     creatorName: 'User', // Will be updated when we have user data
-    isPublic: serverPlaylist.isPublic,
-    createdAt: new Date(serverPlaylist.createdAt).getTime(),
+    isPublic,
+    createdAt,
     // Add new academic fields
-    subject: serverPlaylist.subject,
-    department: serverPlaylist.department,
-    academicYear: serverPlaylist.academicYear,
-    classSection: serverPlaylist.classSection,
-    visibility: serverPlaylist.visibility,
-    status: serverPlaylist.status,
+    subject,
+    department,
+    academicYear,
+    classSection,
+    visibility,
+    status,
   };
 }

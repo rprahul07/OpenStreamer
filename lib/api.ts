@@ -69,17 +69,25 @@ class ApiClient {
       });
 
       const text = await response.text();
-      const data = JSON.parse(text);
+      let data: any = null;
+      try {
+        data = text && text.trim() ? JSON.parse(text) : null;
+      } catch {
+        if (!response.ok) {
+          return { error: text || `HTTP ${response.status}` };
+        }
+        return { success: true, data: null };
+      }
 
       if (!response.ok) {
         return {
-          error: data.error || data.message || `HTTP ${response.status}`,
+          error: (data?.error || data?.message || text) || `HTTP ${response.status}`,
         };
       }
 
       return {
         success: true,
-        data,
+        data: data ?? null,
       };
     } catch (error) {
       return {
@@ -207,17 +215,25 @@ class ApiClient {
       });
 
       const text = await response.text();
-      const data = JSON.parse(text);
+      let data: any = null;
+      try {
+        data = text && text.trim() ? JSON.parse(text) : null;
+      } catch {
+        if (!response.ok) {
+          return { error: text || `HTTP ${response.status}` };
+        }
+        return { success: true, data: null };
+      }
 
       if (!response.ok) {
         return {
-          error: data.error || data.message || `HTTP ${response.status}`,
+          error: (data?.error || data?.message || text) || `HTTP ${response.status}`,
         };
       }
 
       return {
         success: true,
-        data,
+        data: data ?? null,
       };
     } catch (error) {
       return {

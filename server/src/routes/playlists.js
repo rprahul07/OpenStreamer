@@ -8,10 +8,6 @@ const router = express.Router();
 
 console.log('=== PLAYLIST ROUTES INITIALIZED ===');
 
-// Add JSON body parser middleware
-router.use(express.json());
-router.use(express.urlencoded({ extended: true }));
-
 // Configure multer for memory storage (for S3 upload)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -30,6 +26,10 @@ const upload = multer({
 
 // Apply authentication middleware to all subsequent routes
 router.use(authMiddleware);
+
+// Add JSON body parser middleware after auth
+router.use(express.json());
+router.use(express.urlencoded({ extended: true }));
 
 // Main playlist endpoint - works with/without auth
 router.get('/', PlaylistController.getAll);

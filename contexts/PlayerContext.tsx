@@ -1,7 +1,12 @@
 import React, { createContext, useContext, useState, useRef, useMemo, useCallback, ReactNode, useEffect } from 'react';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { Audio } from 'expo-av';
 import { Track } from '@/lib/data';
 import { useAudioSession } from '@/hooks/useAudioSession';
+
+const isExpoGo = Constants.appOwnership === 'expo';
+const NOW_PLAYING_CHANNEL_ID = 'now-playing';
 
 type RepeatMode = 'off' | 'all' | 'one';
 
@@ -42,6 +47,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const positionRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const notificationsSetupDone = useRef(false);
 
   // Configure audio session for background playback
   useAudioSession();
@@ -142,6 +148,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       soundRef.current = sound;
       setIsPlaying(true);
       
+      // Show notification when track starts playing
+      await showPlayingNotification(track);
+      
       // Set up media session for notification controls
       await sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
@@ -178,6 +187,64 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }, 500);
   }
 
+  async function ensureNotificationSetup(Notifications: Awaited<typeof import('expo-notifications')>) {
+    if (notificationsSetupDone.current) return true;
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(NOW_PLAYING_CHANNEL_ID, {
+        name: 'Now Playing',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: null,
+      });
+    }
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    notificationsSetupDone.current = finalStatus === 'granted';
+    return finalStatus === 'granted';
+  }
+
+  async function showPlayingNotification(track: Track) {
+    if (isExpoGo) return;
+    try {
+      const Notifications = await import('expo-notifications');
+      const canShow = await ensureNotificationSetup(Notifications);
+      if (!canShow) return;
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Now Playing',
+          body: `${track.title} - ${track.artist}`,
+          data: { trackId: track.id },
+          ...(Platform.OS === 'android' && { channelId: NOW_PLAYING_CHANNEL_ID }),
+        },
+        trigger: null,
+        identifier: `playing-${track.id}`,
+      });
+    } catch (error) {
+      // Notifications not available (e.g. dev build without setup)
+    }
+  }
+
+  async function clearPlayingNotification() {
+    if (isExpoGo) return;
+    try {
+      const Notifications = await import('expo-notifications');
+      await Notifications.dismissAllNotificationsAsync();
+    } catch (error) {
+      // Notifications not available
+    }
+  }
+
   const playTrack = useCallback(async (track: Track, playlist?: Track[]) => {
     const newQueue = playlist || [track];
     const idx = newQueue.findIndex(t => t.id === track.id);
@@ -202,15 +269,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (status.isPlaying) {
           await soundRef.current.pauseAsync();
           setIsPlaying(false);
+          
+          // Clear playing notification when paused
+          await clearPlayingNotification();
         } else {
           await soundRef.current.playAsync();
           setIsPlaying(true);
+          
+          // Show notification when resumed
+          if (currentTrack) {
+            await showPlayingNotification(currentTrack);
+          }
         }
       }
     } catch (error) {
       console.error('Error toggling play/pause:', error);
     }
-  }, []);
+  }, [currentTrack]);
 
   const seekTo = useCallback(async (pos: number) => {
     if (soundRef.current) {

@@ -303,6 +303,7 @@ export default function UploadScreen() {
             onSelect={(value) => setSubject(value as string)}
             placeholder="Select Subject"
             icon="book-outline"
+            dropdownId="subject"
           />
         </View>
 
@@ -340,17 +341,20 @@ export default function UploadScreen() {
 
         {visibility === 'CLASS' && (
           <>
-            <Dropdown
-              label="Department"
-              value={department}
-              items={ACADEMIC_CONFIG.DEPARTMENTS}
-              onSelect={(value) => setDepartment(value as string)}
-              placeholder="Select Department"
-              icon="business-outline"
-            />
+            <View style={styles.formGroup}>
+              <Dropdown
+                label="Department"
+                value={department}
+                items={ACADEMIC_CONFIG.DEPARTMENTS}
+                onSelect={(value) => setDepartment(value as string)}
+                placeholder="Select Department"
+                icon="business-outline"
+                dropdownId="department"
+              />
+            </View>
 
-            <View style={styles.formRow}>
-              <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+            <View style={[styles.formRow, styles.dropdownRow]}>
+              <View style={[styles.formGroup, styles.dropdownFormItem]}>
                 <Dropdown
                   label="Academic Year"
                   value={academicYear}
@@ -358,10 +362,11 @@ export default function UploadScreen() {
                   onSelect={(value) => setAcademicYear(value as number)}
                   placeholder="Select Year"
                   icon="calendar-outline"
+                  dropdownId="academic-year"
                 />
               </View>
 
-              <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+              <View style={[styles.formGroup, styles.dropdownFormItem]}>
                 <Dropdown
                   label="Class Section"
                   value={classSection}
@@ -369,6 +374,7 @@ export default function UploadScreen() {
                   onSelect={(value) => setClassSection(value as string)}
                   placeholder="Select Section"
                   icon="people-outline"
+                  dropdownId="class-section"
                 />
               </View>
             </View>
@@ -594,6 +600,7 @@ const styles = StyleSheet.create({
   formGroup: {
     paddingHorizontal: 20,
     marginBottom: 20,
+    overflow: 'visible',
   },
   label: {
     fontFamily: 'Poppins_600SemiBold',
@@ -624,6 +631,7 @@ const styles = StyleSheet.create({
   tracksSection: {
     paddingHorizontal: 20,
     marginBottom: 24,
+    overflow: 'visible',
   },
   selectedList: {
     gap: 8,
@@ -701,8 +709,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 16,
   },
+  dropdownRow: {
+    overflow: 'visible',
+  },
+  dropdownFormItem: {
+    flex: 1,
+    marginRight: 0,
+    marginLeft: 0,
+  },
   uploadSection: {
     gap: 16,
+    overflow: 'visible',
   },
   uploadArea: {
     borderWidth: 2,

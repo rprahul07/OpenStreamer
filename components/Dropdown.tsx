@@ -16,6 +16,8 @@ const getZIndex = (dropdownId: string) => {
       return 2000;
     case 'class-section':
       return 1000;
+    case 'subject':
+      return 2500;
     default:
       return 1500;
   }
@@ -71,15 +73,17 @@ export default function Dropdown({
     openDropdownId = null;
   };
 
+  const containerZIndex = isOpen ? 10000 : getZIndex(dropdownId);
+  const listZIndex = isOpen ? 10001 : getZIndex(dropdownId) + 200;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { zIndex: containerZIndex }]}>
       <Text style={styles.label}>{label}</Text>
       <Pressable
         style={[
           styles.dropdownButton,
           disabled && styles.disabled,
           { borderColor: value ? branding.accentColor : Colors.dark.border },
-          { zIndex: isOpen ? getZIndex(dropdownId) + 100 : getZIndex(dropdownId) }
         ]}
         onPress={handleToggle}
         disabled={disabled}
@@ -112,8 +116,8 @@ export default function Dropdown({
 
       {isOpen && !disabled && (
         <View style={[styles.dropdownList, { 
-          zIndex: getZIndex(dropdownId) + 200,
-          elevation: 15
+          zIndex: listZIndex,
+          elevation: 20,
         }]}>
           <ScrollView 
             style={styles.scrollView}
@@ -156,8 +160,8 @@ export default function Dropdown({
 const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
-    zIndex: 1000,
     position: 'relative',
+    overflow: 'visible',
   },
   label: {
     fontFamily: 'Poppins_500Medium',
@@ -211,11 +215,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
     marginTop: 4,
     maxHeight: 180,
-    elevation: 10,
+    elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
+    overflow: 'hidden',
   },
   scrollView: {
     maxHeight: 180,
