@@ -35,7 +35,10 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
@@ -55,8 +58,9 @@
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#F59E0B",
-          "sounds": []
+          "color": "#8B5CF6",
+          "sounds": [],
+          "mode": "production"
         }
       ]
     ],

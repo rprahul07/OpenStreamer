@@ -5,9 +5,22 @@ import { Audio } from 'expo-av';
 import { Track } from '@/lib/data';
 import { useAudioSession } from '@/hooks/useAudioSession';
 
+// ─── Expo Go detection ────────────────────────────────────────────────────────
+// expo-notifications push/remote features were removed from Expo Go in SDK 53.
+// We guard every notification call behind this flag so the module is never
+// imported (and its push-token auto-registration never fires) in Expo Go.
 const isExpoGo = Constants.appOwnership === 'expo';
-const NOW_PLAYING_CHANNEL_ID = 'now-playing';
 
+// ─── Notification constants ───────────────────────────────────────────────────
+const ACTION_PLAY_PAUSE = 'PLAYER_PLAY_PAUSE';
+const ACTION_NEXT = 'PLAYER_NEXT';
+const ACTION_PREV = 'PLAYER_PREV';
+const ACTION_STOP = 'PLAYER_STOP';
+const MEDIA_CATEGORY_ID = 'MEDIA_CONTROLS';
+const NOW_PLAYING_ID = 'now-playing-persistent';
+const NOW_PLAYING_CH = 'now-playing';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 type RepeatMode = 'off' | 'all' | 'one';
 
 interface PlayerContextValue {
@@ -32,6 +45,119 @@ interface PlayerContextValue {
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
+// ─── Notification helpers (only called when !isExpoGo) ───────────────────────
+
+async function getNotifications() {
+  // Dynamic import so the module (and its push-token side-effects) only loads
+  // in environments where it is supported (dev builds, production APK).
+  return import('expo-notifications');
+}
+
+async function setupNotifications(): Promise<boolean> {
+  if (isExpoGo) return false;
+  try {
+    const N = await getNotifications();
+
+    N.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: false,
+        shouldPlaySound: false,
+        shouldShowBanner: false,
+        shouldShowList: true,
+        shouldSetBadge: false,
+      }),
+    });
+
+    if (Platform.OS === 'android') {
+      await N.setNotificationChannelAsync(NOW_PLAYING_CH, {
+        name: 'Now Playing',
+        description: 'Music playback controls',
+        importance: N.AndroidImportance.LOW,
+        sound: null,
+        enableVibrate: false,
+        showBadge: false,
+        lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
+      });
+    }
+
+    // Register interactive category with media control action buttons
+    await N.setNotificationCategoryAsync(MEDIA_CATEGORY_ID, [
+      {
+        identifier: ACTION_PREV,
+        buttonTitle: '⏮',
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: ACTION_PLAY_PAUSE,
+        buttonTitle: '⏯',
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: ACTION_NEXT,
+        buttonTitle: '⏭',
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: ACTION_STOP,
+        buttonTitle: '✕',
+        options: { opensAppToForeground: false, isDestructive: true },
+      },
+    ]);
+
+    const { status: existing } = await N.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await N.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    return finalStatus === 'granted';
+  } catch (err) {
+    console.log('[MediaNotification] setup error:', err);
+    return false;
+  }
+}
+
+async function showOrUpdateMediaNotification(track: Track, isPlaying: boolean) {
+  if (isExpoGo) return;
+  try {
+    const N = await getNotifications();
+    const statusText = isPlaying ? '▶ Playing' : '⏸ Paused';
+
+    await N.scheduleNotificationAsync({
+      identifier: NOW_PLAYING_ID,
+      content: {
+        title: track.title,
+        body: `${track.artist}${track.album ? ' · ' + track.album : ''}`,
+        subtitle: statusText,
+        data: { type: 'media_player', trackId: track.id },
+        categoryIdentifier: MEDIA_CATEGORY_ID,
+        sticky: true,
+        autoDismiss: false,
+        sound: false,
+        ...(Platform.OS === 'android' && {
+          vibrate: [],
+          priority: 'low',
+          color: '#8B5CF6',
+        }),
+      },
+      trigger: Platform.OS === 'android' ? { channelId: NOW_PLAYING_CH } : null,
+    });
+  } catch (err) {
+    console.log('[MediaNotification] show/update error:', err);
+  }
+}
+
+async function dismissMediaNotification() {
+  if (isExpoGo) return;
+  try {
+    const N = await getNotifications();
+    await N.dismissNotificationAsync(NOW_PLAYING_ID);
+  } catch (_) { }
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
@@ -47,12 +173,57 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const positionRef = useRef(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const notificationsSetupDone = useRef(false);
+  const notificationReady = useRef(false);
+  const currentTrackRef = useRef<Track | null>(null);
+  const isPlayingRef = useRef(false);
+  const queueRef = useRef(queue);
+  const currentIndexRef = useRef(currentIndex);
+  const repeatModeRef = useRef(repeatMode);
+
+  // Keep refs in sync with state
+  useEffect(() => { currentTrackRef.current = currentTrack; }, [currentTrack]);
+  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
+  useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
 
   // Configure audio session for background playback
   useAudioSession();
 
-  // Update position every second when playing
+  // ── Notification setup (skipped in Expo Go) ──────────────────────────────
+  useEffect(() => {
+    if (isExpoGo) return; // Skip entirely in Expo Go
+    setupNotifications().then((granted) => {
+      notificationReady.current = granted;
+    });
+    return () => { dismissMediaNotification(); };
+  }, []);
+
+  // ── Notification action listener (skipped in Expo Go) ───────────────────
+  useEffect(() => {
+    if (isExpoGo) return;
+
+    let subscription: { remove: () => void } | null = null;
+
+    getNotifications().then((N) => {
+      subscription = N.addNotificationResponseReceivedListener(async (response) => {
+        const actionId = response.actionIdentifier;
+        const data = response.notification.request.content.data as any;
+        if (data?.type !== 'media_player') return;
+
+        switch (actionId) {
+          case ACTION_PLAY_PAUSE: await handleTogglePlayPause(); break;
+          case ACTION_NEXT: await handlePlayNext(); break;
+          case ACTION_PREV: await handlePlayPrevious(); break;
+          case ACTION_STOP: await handleStop(); break;
+        }
+      });
+    });
+
+    return () => { subscription?.remove(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Position polling ──────────────────────────────────────────────────────
   useEffect(() => {
     if (isPlaying && soundRef.current) {
       intervalRef.current = setInterval(async () => {
@@ -65,34 +236,44 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         }
       }, 1000) as unknown as NodeJS.Timeout;
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isPlaying]);
 
-  const queueRef = useRef(queue);
-  const currentIndexRef = useRef(currentIndex);
-  const repeatModeRef = useRef(repeatMode);
+  // ── Internal control functions ────────────────────────────────────────────
 
-  useEffect(() => {
-    queueRef.current = queue;
-  }, [queue]);
+  async function handleStop() {
+    if (soundRef.current) {
+      await soundRef.current.stopAsync();
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+    }
+    dismissMediaNotification();
+  }
 
-  useEffect(() => {
-    currentIndexRef.current = currentIndex;
-  }, [currentIndex]);
-
-  useEffect(() => {
-    repeatModeRef.current = repeatMode;
-  }, [repeatMode]);
+  async function handleTogglePlayPause() {
+    if (!soundRef.current) return;
+    try {
+      const status = await soundRef.current.getStatusAsync();
+      if (!status.isLoaded) return;
+      if (status.isPlaying) {
+        await soundRef.current.pauseAsync();
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+        if (currentTrackRef.current && notificationReady.current)
+          await showOrUpdateMediaNotification(currentTrackRef.current, false);
+      } else {
+        await soundRef.current.playAsync();
+        setIsPlaying(true);
+        isPlayingRef.current = true;
+        if (currentTrackRef.current && notificationReady.current)
+          await showOrUpdateMediaNotification(currentTrackRef.current, true);
+      }
+    } catch (err) {
+      console.error('[Player] togglePlayPause error:', err);
+    }
+  }
 
   async function handleTrackEnd() {
     const q = queueRef.current;
@@ -100,150 +281,100 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const rm = repeatModeRef.current;
 
     if (rm === 'one') {
-      if (soundRef.current) {
-        await soundRef.current.replayAsync();
-      }
+      if (soundRef.current) await soundRef.current.replayAsync();
       return;
     }
     if (idx < q.length - 1) {
-      const nextIdx = idx + 1;
-      loadTrack(q[nextIdx], nextIdx);
+      loadTrack(q[idx + 1], idx + 1);
     } else if (rm === 'all' && q.length > 0) {
       loadTrack(q[0], 0);
     } else {
       setIsPlaying(false);
+      dismissMediaNotification();
     }
   }
 
+  async function handlePlayNext() {
+    const q = queueRef.current;
+    const idx = currentIndexRef.current;
+    const rm = repeatModeRef.current;
+    if (!q.length) return;
+    let nextIdx = idx + 1;
+    if (nextIdx >= q.length) {
+      if (rm !== 'all') return;
+      nextIdx = 0;
+    }
+    await loadTrack(q[nextIdx], nextIdx);
+  }
+
+  async function handlePlayPrevious() {
+    const q = queueRef.current;
+    const idx = currentIndexRef.current;
+    const rm = repeatModeRef.current;
+    if (!q.length) return;
+    if (positionRef.current > 3000) {
+      if (soundRef.current) { await soundRef.current.setPositionAsync(0); setPosition(0); }
+      return;
+    }
+    let prevIdx = idx - 1;
+    if (prevIdx < 0) prevIdx = rm === 'all' ? q.length - 1 : 0;
+    await loadTrack(q[prevIdx], prevIdx);
+  }
+
+  // ── Core track loader ─────────────────────────────────────────────────────
+
   async function loadTrack(track: Track, index: number) {
     setIsLoading(true);
-    
-    // Unload previous sound
+
     if (soundRef.current) {
       await soundRef.current.unloadAsync();
       soundRef.current = null;
     }
 
     setCurrentTrack(track);
+    currentTrackRef.current = track;
     setCurrentIndex(index);
+    setPosition(0);
+    positionRef.current = 0;
 
     try {
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.uri || '' },
-        {
-          shouldPlay: true,
-          isLooping: false,
-          volume: 1.0,
-        },
+        { shouldPlay: true, isLooping: false, volume: 1.0 },
         (status) => {
           if (status.isLoaded) {
             setDuration(status.durationMillis || 0);
-            if (status.didJustFinish) {
-              handleTrackEnd();
-            }
+            if (status.didJustFinish) handleTrackEnd();
           }
         }
       );
 
       soundRef.current = sound;
       setIsPlaying(true);
-      
-      // Show notification when track starts playing
-      await showPlayingNotification(track);
-      
-      // Set up media session for notification controls
-      await sound.setOnPlaybackStatusUpdate((status) => {
+      isPlayingRef.current = true;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded) {
           setPosition(status.positionMillis || 0);
           setDuration(status.durationMillis || 0);
           setIsPlaying(status.isPlaying || false);
-          
-          if (status.didJustFinish) {
-            handleTrackEnd();
-          }
+          isPlayingRef.current = status.isPlaying || false;
+          if (status.didJustFinish) handleTrackEnd();
         }
       });
 
-      // Update media session metadata for notification controls
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          staysActiveInBackground: true,
-          playsInSilentModeIOS: true,
-          shouldDuckAndroid: true,
-          playThroughEarpieceAndroid: false,
-        });
-      } catch (error) {
-        console.log('Error updating audio mode for media session:', error);
+      // Show media notification (only in dev build / production)
+      if (notificationReady.current) {
+        await showOrUpdateMediaNotification(track, true);
       }
-
-    } catch (error) {
-      console.error('Error loading track:', error);
-      setIsLoading(false);
+    } catch (err) {
+      console.error('[Player] loadTrack error:', err);
     }
 
-    setTimeout(() => {
-      setIsLoading(false);
-    }, 500);
+    setTimeout(() => setIsLoading(false), 500);
   }
 
-  async function ensureNotificationSetup(Notifications: Awaited<typeof import('expo-notifications')>) {
-    if (notificationsSetupDone.current) return true;
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync(NOW_PLAYING_CHANNEL_ID, {
-        name: 'Now Playing',
-        importance: Notifications.AndroidImportance.HIGH,
-        sound: null,
-      });
-    }
-    const { status: existing } = await Notifications.getPermissionsAsync();
-    let finalStatus = existing;
-    if (existing !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    notificationsSetupDone.current = finalStatus === 'granted';
-    return finalStatus === 'granted';
-  }
-
-  async function showPlayingNotification(track: Track) {
-    if (isExpoGo) return;
-    try {
-      const Notifications = await import('expo-notifications');
-      const canShow = await ensureNotificationSetup(Notifications);
-      if (!canShow) return;
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Now Playing',
-          body: `${track.title} - ${track.artist}`,
-          data: { trackId: track.id },
-          ...(Platform.OS === 'android' && { channelId: NOW_PLAYING_CHANNEL_ID }),
-        },
-        trigger: null,
-        identifier: `playing-${track.id}`,
-      });
-    } catch (error) {
-      // Notifications not available (e.g. dev build without setup)
-    }
-  }
-
-  async function clearPlayingNotification() {
-    if (isExpoGo) return;
-    try {
-      const Notifications = await import('expo-notifications');
-      await Notifications.dismissAllNotificationsAsync();
-    } catch (error) {
-      // Notifications not available
-    }
-  }
+  // ── Public API ────────────────────────────────────────────────────────────
 
   const playTrack = useCallback(async (track: Track, playlist?: Track[]) => {
     const newQueue = playlist || [track];
@@ -254,78 +385,29 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const playPlaylist = useCallback(async (tracks: Track[], startIndex = 0) => {
-    if (tracks.length === 0) return;
+    if (!tracks.length) return;
     setQueue(tracks);
     setOriginalQueue(tracks);
     await loadTrack(tracks[startIndex], startIndex);
   }, []);
 
   const togglePlayPause = useCallback(async () => {
-    if (!soundRef.current) return;
-    
-    try {
-      const status = await soundRef.current.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-          
-          // Clear playing notification when paused
-          await clearPlayingNotification();
-        } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-          
-          // Show notification when resumed
-          if (currentTrack) {
-            await showPlayingNotification(currentTrack);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error toggling play/pause:', error);
-    }
-  }, [currentTrack]);
+    await handleTogglePlayPause();
+  }, []);
 
   const seekTo = useCallback(async (pos: number) => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.setPositionAsync(pos);
-        setPosition(pos);
-      } catch (error) {
-        console.error('Error seeking:', error);
-      }
+    if (!soundRef.current) return;
+    try {
+      await soundRef.current.setPositionAsync(pos);
+      setPosition(pos);
+      positionRef.current = pos;
+    } catch (err) {
+      console.error('[Player] seekTo error:', err);
     }
   }, []);
 
-  const playNext = useCallback(async () => {
-    const q = queueRef.current;
-    const idx = currentIndexRef.current;
-    const rm = repeatModeRef.current;
-    if (q.length === 0) return;
-    let nextIdx = idx + 1;
-    if (nextIdx >= q.length) {
-      nextIdx = rm === 'all' ? 0 : q.length - 1;
-      if (rm !== 'all') return;
-    }
-    await loadTrack(q[nextIdx], nextIdx);
-  }, []);
-
-  const playPrevious = useCallback(async () => {
-    const q = queueRef.current;
-    const idx = currentIndexRef.current;
-    const rm = repeatModeRef.current;
-    if (q.length === 0) return;
-    if (positionRef.current > 3000) {
-      await seekTo(0);
-      return;
-    }
-    let prevIdx = idx - 1;
-    if (prevIdx < 0) {
-      prevIdx = rm === 'all' ? q.length - 1 : 0;
-    }
-    await loadTrack(q[prevIdx], prevIdx);
-  }, [seekTo]);
+  const playNext = useCallback(async () => { await handlePlayNext(); }, []);
+  const playPrevious = useCallback(async () => { await handlePlayPrevious(); }, []);
 
   const toggleShuffle = useCallback(() => {
     setIsShuffled(prev => {
@@ -338,8 +420,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           const j = Math.floor(Math.random() * (i + 1));
           [rest[i], rest[j]] = [rest[j], rest[i]];
         }
-        const shuffled = [current, ...rest];
-        setQueue(shuffled);
+        setQueue([current, ...rest]);
         setCurrentIndex(0);
         return true;
       } else {
@@ -353,11 +434,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [originalQueue]);
 
   const toggleRepeat = useCallback(() => {
-    setRepeatMode(prev => {
-      if (prev === 'off') return 'all';
-      if (prev === 'all') return 'one';
-      return 'off';
-    });
+    setRepeatMode(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
   }, []);
 
   const addToQueue = useCallback((track: Track) => {
@@ -366,23 +443,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(() => ({
-    currentTrack,
-    queue,
-    isPlaying,
-    position,
-    duration,
-    isShuffled,
-    repeatMode,
-    isLoading,
-    playTrack,
-    playPlaylist,
-    togglePlayPause,
-    seekTo,
-    playNext,
-    playPrevious,
-    toggleShuffle,
-    toggleRepeat,
-    addToQueue,
+    currentTrack, queue, isPlaying, position, duration,
+    isShuffled, repeatMode, isLoading,
+    playTrack, playPlaylist, togglePlayPause, seekTo,
+    playNext, playPrevious, toggleShuffle, toggleRepeat, addToQueue,
   }), [currentTrack, queue, isPlaying, position, duration, isShuffled, repeatMode, isLoading]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
