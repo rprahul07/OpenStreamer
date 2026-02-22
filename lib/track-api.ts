@@ -96,7 +96,7 @@ export async function uploadTrack(trackData: UploadTrackRequest): Promise<TrackR
     formData.append('album', trackData.album || '');
     formData.append('uploadedBy', trackData.uploadedBy);
     formData.append('isPublic', trackData.isPublic);
-    formData.append('playlistId', trackData.playlistId);
+    formData.append('playlistId', trackData.playlistId || '');      
 
     // Add optional fields only if they exist
     if (trackData.department) {

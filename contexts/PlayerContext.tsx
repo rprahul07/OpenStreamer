@@ -52,8 +52,12 @@ async function getNotifications() {
 }
 
 async function setupNotifications(): Promise<boolean> {
-  if (isExpoGo) return false;
+  if (isExpoGo) {
+    console.log('[MediaNotification] Skipped setup: Running in Expo Go');
+    return false;
+  }
   try {
+    console.log('[MediaNotification] Starting setup...');
     const N = await getNotifications();
 
     N.setNotificationHandler({
@@ -67,10 +71,11 @@ async function setupNotifications(): Promise<boolean> {
     });
 
     if (Platform.OS === 'android') {
+      console.log('[MediaNotification] Setting up Android channel...');
       await N.setNotificationChannelAsync(NOW_PLAYING_CH, {
         name: 'Now Playing',
         description: 'Music playback controls',
-        importance: N.AndroidImportance.LOW,
+        importance: N.AndroidImportance.DEFAULT,
         sound: null,
         enableVibrate: false,
         showBadge: false,
@@ -78,6 +83,7 @@ async function setupNotifications(): Promise<boolean> {
       });
     }
 
+    console.log('[MediaNotification] Setting up media category...');
     await N.setNotificationCategoryAsync(MEDIA_CATEGORY_ID, [
       {
         identifier: ACTION_PREV,
@@ -102,15 +108,19 @@ async function setupNotifications(): Promise<boolean> {
     ]);
 
     const { status: existing } = await N.getPermissionsAsync();
+    console.log('[MediaNotification] Permission status:', existing);
     let finalStatus = existing;
     if (existing !== 'granted') {
       const { status } = await N.requestPermissionsAsync();
       finalStatus = status;
+      console.log('[MediaNotification] Requested permission status:', finalStatus);
     }
 
-    return finalStatus === 'granted';
+    const granted = finalStatus === 'granted';
+    console.log('[MediaNotification] Setup complete. Ready:', granted);
+    return granted;
   } catch (err) {
-    console.log('[MediaNotification] setup error:', err);
+    console.error('[MediaNotification] setup error:', err);
     return false;
   }
 }
@@ -134,7 +144,7 @@ async function showOrUpdateMediaNotification(track: Track, isPlaying: boolean) {
         sound: false,
         ...(Platform.OS === 'android' && {
           vibrate: [],
-          priority: 'low',
+          priority: 'default',
           color: '#8B5CF6',
         }),
       },
@@ -170,7 +180,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const soundRef = useRef<Audio.Sound | null>(null);
   const positionRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const notificationReady = useRef(false);
+  const [notificationReady, setNotificationReady] = useState(false);
   const currentTrackRef = useRef<Track | null>(null);
   const isPlayingRef = useRef(false);
   const queueRef = useRef<Track[]>([]);
@@ -191,9 +201,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   // ── Notification setup ───────────────────────────────────────────────────
   useEffect(() => {
     if (isExpoGo) return;
-    setupNotifications().then(granted => { notificationReady.current = granted; });
+    setupNotifications().then(granted => { setNotificationReady(granted); });
     return () => { dismissMediaNotification(); };
   }, []);
+
+  // ── Notification synchronization ─────────────────────────────────────────
+  useEffect(() => {
+    if (isExpoGo || !notificationReady || !currentTrack) return;
+
+    showOrUpdateMediaNotification(currentTrack, isPlaying).catch(err => {
+      console.error('[MediaNotification] Sync error:', err);
+    });
+  }, [currentTrack, isPlaying, notificationReady]);
 
   // ── Notification action listener ─────────────────────────────────────────
   useEffect(() => {
@@ -204,6 +223,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const actionId = response.actionIdentifier;
         const data = response.notification.request.content.data as any;
         if (data?.type !== 'media_player') return;
+
+        console.log('[MediaNotification] Action received:', actionId);
+
         switch (actionId) {
           case ACTION_PLAY_PAUSE: await handleTogglePlayPause(); break;
           case ACTION_NEXT: await handlePlayNext(); break;
@@ -257,13 +279,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         await soundRef.current.pauseAsync();
         setIsPlaying(false);
         isPlayingRef.current = false;
-        if (currentTrackRef.current && notificationReady.current)
+        if (currentTrackRef.current && notificationReady)
           await showOrUpdateMediaNotification(currentTrackRef.current, false);
       } else {
         await soundRef.current.playAsync();
         setIsPlaying(true);
         isPlayingRef.current = true;
-        if (currentTrackRef.current && notificationReady.current)
+        if (currentTrackRef.current && notificationReady)
           await showOrUpdateMediaNotification(currentTrackRef.current, true);
       }
     } catch (err) {
@@ -382,7 +404,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (status.didJustFinish) handleTrackEnd();
       });
 
-      if (notificationReady.current) {
+      if (notificationReady) {
         await showOrUpdateMediaNotification(track, true);
       }
     } catch (err) {
