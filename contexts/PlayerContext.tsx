@@ -52,10 +52,10 @@ async function getNotifications() {
 }
 
 async function setupNotifications(): Promise<boolean> {
-  if (isExpoGo) {
+  /* if (isExpoGo) {
     console.log('[MediaNotification] Skipped setup: Running in Expo Go');
     return false;
-  }
+  } */
   try {
     console.log('[MediaNotification] Starting setup...');
     const N = await getNotifications();
@@ -126,7 +126,7 @@ async function setupNotifications(): Promise<boolean> {
 }
 
 async function showOrUpdateMediaNotification(track: Track, isPlaying: boolean) {
-  if (isExpoGo) return;
+  // if (isExpoGo) return;
   try {
     const N = await getNotifications();
     const statusText = isPlaying ? '▶ Playing' : '⏸ Paused';
@@ -156,7 +156,7 @@ async function showOrUpdateMediaNotification(track: Track, isPlaying: boolean) {
 }
 
 async function dismissMediaNotification() {
-  if (isExpoGo) return;
+  // if (isExpoGo) return;
   try {
     const N = await getNotifications();
     await N.dismissNotificationAsync(NOW_PLAYING_ID);
@@ -200,14 +200,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ── Notification setup ───────────────────────────────────────────────────
   useEffect(() => {
-    if (isExpoGo) return;
+    // if (isExpoGo) return;
     setupNotifications().then(granted => { setNotificationReady(granted); });
     return () => { dismissMediaNotification(); };
   }, []);
 
   // ── Notification synchronization ─────────────────────────────────────────
   useEffect(() => {
-    if (isExpoGo || !notificationReady || !currentTrack) return;
+    if (!notificationReady || !currentTrack) return;
 
     showOrUpdateMediaNotification(currentTrack, isPlaying).catch(err => {
       console.error('[MediaNotification] Sync error:', err);
@@ -216,7 +216,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   // ── Notification action listener ─────────────────────────────────────────
   useEffect(() => {
-    if (isExpoGo) return;
+    // if (isExpoGo) return;
     let subscription: { remove: () => void } | null = null;
     getNotifications().then(N => {
       subscription = N.addNotificationResponseReceivedListener(async response => {

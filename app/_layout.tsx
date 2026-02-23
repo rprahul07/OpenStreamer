@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { LogBox } from "react-native";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -20,6 +21,11 @@ import {
 } from "@expo-google-fonts/poppins";
 
 SplashScreen.preventAutoHideAsync();
+
+LogBox.ignoreLogs([
+  "expo-notifications: Android Push notifications",
+  "expo-notifications functionality is not fully supported in Expo Go",
+]);
 
 function RootLayoutNav() {
   return (
