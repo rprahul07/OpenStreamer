@@ -10,9 +10,11 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePlayer } from '@/contexts/PlayerContext';
 import { apiClient } from '@/lib/api';
 import Colors from '@/constants/colors';
 
@@ -37,10 +39,12 @@ interface PendingPlaylist {
 
 export default function ApprovalScreen() {
   const { user } = useAuth();
+  const { playPlaylist } = usePlayer();
   const [pendingPlaylists, setPendingPlaylists] = useState<PendingPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null);
 
   // Redirect non-teachers
   useEffect(() => {
@@ -92,37 +96,75 @@ export default function ApprovalScreen() {
     }
   };
 
-  const handleReject = async (playlistId: string, playlistName: string) => {
-    Alert.prompt(
-      'Reject Playlist',
-      `Please provide a reason for rejecting "${playlistName}":`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reject',
-          style: 'destructive',
-          onPress: async (reason: string | undefined) => {
-            if (!reason?.trim()) {
-              Alert.alert('Error', 'Please provide a reason for rejection');
-              return;
-            }
+  const handleListen = async (playlistId: string) => {
+    try {
+      setPreviewLoading(playlistId);
+      const response = await apiClient.get(`/api/playlists/${playlistId}/tracks`);
+      const tracks = response.data || [];
 
-            try {
-              await apiClient.patch(`/api/playlists/${playlistId}/reject`, {
-                reason: reason.trim(),
-              });
-              Alert.alert('Success', 'Playlist rejected successfully');
-              // Refresh the list to remove the rejected playlist
-              fetchPendingPlaylists();
-            } catch (error) {
-              console.error('Error rejecting playlist:', error);
-              Alert.alert('Error', 'Failed to reject playlist');
-            }
+      if (tracks.length === 0) {
+        Alert.alert('Empty Playlist', 'This playlist has no tracks to listen to.');
+        return;
+      }
+
+      await playPlaylist(tracks);
+    } catch (error) {
+      console.error('Error fetching tracks for preview:', error);
+      Alert.alert('Error', 'Failed to load tracks for listening.');
+    } finally {
+      setPreviewLoading(null);
+    }
+  };
+
+  const handleReject = async (playlistId: string, playlistName: string) => {
+    if (Platform.OS === 'ios') {
+      Alert.prompt(
+        'Reject Playlist',
+        `Please provide a reason for rejecting "${playlistName}":`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reject',
+            style: 'destructive',
+            onPress: async (reason: string | undefined) => {
+              await performReject(playlistId, reason || 'No reason provided');
+            },
           },
-        },
-      ],
-      'plain-text'
-    );
+        ],
+        'plain-text'
+      );
+    } else {
+      // For Android, we use a simple alert with a pre-filled reason or just prompt if available
+      // Actually, standard Alert.alert doesn't have an input. 
+      // For now, let's just use a simple rejection and maybe implement a proper modal later if needed.
+      Alert.alert(
+        'Reject Playlist',
+        `Are you sure you want to reject "${playlistName}"?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Reject',
+            style: 'destructive',
+            onPress: async () => {
+              await performReject(playlistId, 'Rejected by teacher');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const performReject = async (playlistId: string, reason: string) => {
+    try {
+      await apiClient.patch(`/api/playlists/${playlistId}/reject`, {
+        reason: reason.trim(),
+      });
+      Alert.alert('Success', 'Playlist rejected successfully');
+      fetchPendingPlaylists();
+    } catch (error) {
+      console.error('Error rejecting playlist:', error);
+      Alert.alert('Error', 'Failed to reject playlist');
+    }
   };
 
   const onRefresh = () => {
@@ -203,6 +245,20 @@ export default function ApprovalScreen() {
 
       <View style={styles.actionButtons}>
         <TouchableOpacity
+          style={[styles.actionButton, styles.listenButton]}
+          onPress={() => handleListen(item.id)}
+          disabled={previewLoading === item.id}
+        >
+          {previewLoading === item.id ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <>
+              <Ionicons name="play-outline" size={20} color="white" />
+              <Text style={styles.actionButtonText}>Listen</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionButton, styles.rejectButton]}
           onPress={() => handleReject(item.id, item.name)}
         >
@@ -240,13 +296,20 @@ export default function ApprovalScreen() {
         />
       </View>
 
-      <ScrollView
+      <FlatList
         style={styles.content}
+        data={filteredPlaylists}
+        renderItem={renderPlaylistItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={[
+          styles.listContainer,
+          filteredPlaylists.length === 0 && { flex: 1, justifyContent: 'center' }
+        ]}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.dark.accent} />
         }
-      >
-        {filteredPlaylists.length === 0 ? (
+        ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="checkmark-circle-outline" size={64} color={Colors.dark.textMuted} />
             <Text style={styles.emptyText}>
@@ -256,16 +319,8 @@ export default function ApprovalScreen() {
               {searchQuery ? 'Try a different search term' : 'All caught up! No playlists need approval.'}
             </Text>
           </View>
-        ) : (
-          <FlatList
-            data={filteredPlaylists}
-            renderItem={renderPlaylistItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContainer}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-      </ScrollView>
+        }
+      />
     </View>
   );
 }
@@ -423,8 +478,11 @@ const styles = StyleSheet.create({
   approveButton: {
     backgroundColor: Colors.dark.success,
   },
+  listenButton: {
+    backgroundColor: Colors.dark.textSecondary,
+  },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: 'white',
   },

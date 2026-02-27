@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -49,6 +49,15 @@ export default function UploadScreen() {
   const [sourceTab, setSourceTab] = useState<SourceTab>('upload');
   const [showTrackPicker, setShowTrackPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Initialize fields with user data
+  useEffect(() => {
+    if (user) {
+      if (user.department) setDepartment(user.department);
+      if (user.academicYear) setAcademicYear(user.academicYear);
+      if (user.classSection) setClassSection(user.classSection);
+    }
+  }, [user]);
 
   async function pickCover() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -146,7 +155,7 @@ export default function UploadScreen() {
             classSection: visibility === 'CLASS' ? (classSection || undefined) : undefined,
             playlistId: 'temp', // Will be updated after playlist creation
           });
-          
+
           if (uploadedTrack) {
             uploadedTrackIds.push(uploadedTrack.id);
           }
@@ -158,7 +167,7 @@ export default function UploadScreen() {
       // Create playlist with cover image (if any)
       // Create FormData for playlist creation (to handle cover image)
       const formData = new FormData();
-      
+
       // Add all playlist data as form fields
       const playlistDataForForm = {
         name: name.trim(),
@@ -207,7 +216,7 @@ export default function UploadScreen() {
       }
 
       const newPlaylist = await response.json();
-      
+
       if (newPlaylist) {
         // Add selected tracks to the playlist
         if (uploadedTrackIds.length > 0) {
@@ -219,7 +228,7 @@ export default function UploadScreen() {
             });
           }
         }
-        
+
         Alert.alert('Success', 'Playlist created successfully as draft!');
         // Reset form
         setName('');
@@ -314,10 +323,10 @@ export default function UploadScreen() {
               style={[styles.visibilityOption, visibility === 'PUBLIC' && { backgroundColor: branding.accentColor }]}
               onPress={() => setVisibility('PUBLIC')}
             >
-              <Ionicons 
-                name="globe" 
-                size={20} 
-                color={visibility === 'PUBLIC' ? '#fff' : Colors.dark.textSecondary} 
+              <Ionicons
+                name="globe"
+                size={20}
+                color={visibility === 'PUBLIC' ? '#fff' : Colors.dark.textSecondary}
               />
               <Text style={[styles.visibilityText, visibility === 'PUBLIC' && { color: '#fff' }]}>
                 Public
@@ -327,10 +336,10 @@ export default function UploadScreen() {
               style={[styles.visibilityOption, visibility === 'CLASS' && { backgroundColor: branding.accentColor }]}
               onPress={() => setVisibility('CLASS')}
             >
-              <Ionicons 
-                name="people" 
-                size={20} 
-                color={visibility === 'CLASS' ? '#fff' : Colors.dark.textSecondary} 
+              <Ionicons
+                name="people"
+                size={20}
+                color={visibility === 'CLASS' ? '#fff' : Colors.dark.textSecondary}
               />
               <Text style={[styles.visibilityText, visibility === 'CLASS' && { color: '#fff' }]}>
                 Class
@@ -341,7 +350,7 @@ export default function UploadScreen() {
 
         {visibility === 'CLASS' && (
           <>
-            <View style={styles.formGroup}>
+            <View style={[styles.formGroup, (user?.academicRole === 'STUDENT' || user?.role === 'listener') && { opacity: 0.7 }]}>
               <Dropdown
                 label="Department"
                 value={department}
@@ -350,7 +359,13 @@ export default function UploadScreen() {
                 placeholder="Select Department"
                 icon="business-outline"
                 dropdownId="department"
+                disabled={(user?.academicRole === 'STUDENT' || user?.role === 'listener')}
               />
+              {(user?.academicRole === 'STUDENT' || user?.role === 'listener') && (
+                <Text style={{ color: Colors.dark.textMuted, fontSize: 12, marginTop: -8, marginLeft: 4 }}>
+                  Assigned to your department ({user.department}).
+                </Text>
+              )}
             </View>
 
             <View style={[styles.formRow, styles.dropdownRow]}>

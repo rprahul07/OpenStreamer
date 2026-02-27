@@ -49,28 +49,34 @@ export default function RegisterScreen() {
       setError('Password must be at least 4 characters');
       return;
     }
-    
+
+    // Department is required for everyone now
+    if (!department) {
+      setError('Please select your department');
+      return;
+    }
+
     // Additional validation for students
     if (userType === 'student') {
-      if (!department || !academicYear || !classSection) {
-        setError('Please select department, academic year, and class section');
+      if (!academicYear || !classSection) {
+        setError('Please select academic year and class section');
         return;
       }
     }
 
     setLoading(true);
     setError('');
-    
+
     const result = await register(
-      username.trim(), 
-      password, 
+      username.trim(),
+      password,
       displayName.trim(),
       userType === 'teacher' ? 'creator' : 'listener',
-      userType === 'student' ? (department || undefined) : undefined,
+      department || undefined,
       userType === 'student' ? (academicYear || undefined) : undefined,
       userType === 'student' ? (classSection || undefined) : undefined
     );
-    
+
     setLoading(false);
     if (result.success) {
       router.replace('/(tabs)');
@@ -174,10 +180,10 @@ export default function RegisterScreen() {
                   style={[styles.userTypeOption, userType === 'student' && { backgroundColor: branding.accentColor }]}
                   onPress={() => setUserType('student')}
                 >
-                  <Ionicons 
-                    name="school-outline" 
-                    size={20} 
-                    color={userType === 'student' ? '#fff' : Colors.dark.textSecondary} 
+                  <Ionicons
+                    name="school-outline"
+                    size={20}
+                    color={userType === 'student' ? '#fff' : Colors.dark.textSecondary}
                   />
                   <Text style={[styles.userTypeText, userType === 'student' && { color: '#fff' }]}>
                     Student
@@ -187,10 +193,10 @@ export default function RegisterScreen() {
                   style={[styles.userTypeOption, userType === 'teacher' && { backgroundColor: branding.accentColor }]}
                   onPress={() => setUserType('teacher')}
                 >
-                  <Ionicons 
-                    name="person-outline" 
-                    size={20} 
-                    color={userType === 'teacher' ? '#fff' : Colors.dark.textSecondary} 
+                  <Ionicons
+                    name="person-outline"
+                    size={20}
+                    color={userType === 'teacher' ? '#fff' : Colors.dark.textSecondary}
                   />
                   <Text style={[styles.userTypeText, userType === 'teacher' && { color: '#fff' }]}>
                     Teacher
@@ -199,18 +205,20 @@ export default function RegisterScreen() {
               </View>
             </View>
 
-            {/* Academic Information for Students */}
+            {/* Academic Information */}
+            <Dropdown
+              label="Department"
+              value={department}
+              items={ACADEMIC_CONFIG.DEPARTMENTS}
+              onSelect={(value) => setDepartment(value as string)}
+              placeholder="Select Department"
+              icon="business-outline"
+              dropdownId="department"
+            />
+
+            {/* Additional Academic Information for Students */}
             {userType === 'student' && (
               <>
-                <Dropdown
-                  label="Department"
-                  value={department}
-                  items={ACADEMIC_CONFIG.DEPARTMENTS}
-                  onSelect={(value) => setDepartment(value as string)}
-                  placeholder="Select Department"
-                  icon="business-outline"
-                  dropdownId="department"
-                />
 
                 <View style={styles.academicRow}>
                   <View style={styles.academicItem}>

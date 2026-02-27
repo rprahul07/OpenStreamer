@@ -5,14 +5,14 @@ const UserModel = require('../models/User');
 class AuthController {
   static async register(req, res) {
     try {
-      const { 
-        username, 
-        password, 
-        displayName, 
-        role = 'creator', 
-        department, 
-        academicYear, 
-        classSection 
+      const {
+        username,
+        password,
+        displayName,
+        role = 'creator',
+        department,
+        academicYear,
+        classSection
       } = req.body;
 
       // Validate input
@@ -29,8 +29,8 @@ class AuthController {
       // Additional validation for students
       if (academicRole === 'STUDENT') {
         if (!department || !academicYear || !classSection) {
-          return res.status(400).json({ 
-            error: 'Department, academic year, and class section are required for student registration' 
+          return res.status(400).json({
+            error: 'Department, academic year, and class section are required for student registration'
           });
         }
 
@@ -60,18 +60,18 @@ class AuthController {
         display_name: displayName,
         role,
         academic_role: academicRole,
-        department: academicRole === 'STUDENT' ? department : null,
+        department: department || null,
         academic_year: academicRole === 'STUDENT' ? academicYear : null,
-        class_section: academicRole === 'STUDENT' ? classSection.toUpperCase() : null
+        class_section: academicRole === 'STUDENT' ? (classSection ? classSection.toUpperCase() : null) : null
       };
 
       const user = await UserModel.create(userData);
 
       // Generate JWT token
       const token = jwt.sign(
-        { 
-          id: user.id, 
-          username: user.username, 
+        {
+          id: user.id,
+          username: user.username,
           role: user.role,
           academic_role: user.academic_role,
           department: user.department,
@@ -121,9 +121,9 @@ class AuthController {
 
       // Generate JWT token
       const token = jwt.sign(
-        { 
-          id: user.id, 
-          username: user.username, 
+        {
+          id: user.id,
+          username: user.username,
           role: user.role,
           academic_role: user.academic_role,
           department: user.department,

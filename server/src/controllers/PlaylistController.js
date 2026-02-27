@@ -18,10 +18,10 @@ class PlaylistController {
   static async getAll(req, res) {
     try {
       let playlists;
-      
+
       console.log('=== PLAYLIST GET DEBUG ===');
       console.log('User present:', !!req.user);
-      
+
       // If no user, return only public playlists
       if (!req.user) {
         console.log('No user detected, returning public playlists only');
@@ -32,7 +32,7 @@ class PlaylistController {
         console.log('User department:', req.user.department);
         console.log('User academic_year:', req.user.academic_year);
         console.log('User class_section:', req.user.class_section);
-        
+
         const studentInfo = {
           department: req.user.department,
           academic_year: req.user.academic_year,
@@ -45,7 +45,7 @@ class PlaylistController {
         console.log('Non-student user detected, showing all approved playlists');
         playlists = await Playlist.findAllApproved();
       }
-      
+
       console.log('Final playlist count:', playlists?.length || 0);
       res.json(playlists);
     } catch (error) {
@@ -58,11 +58,11 @@ class PlaylistController {
     try {
       const { id } = req.params;
       const playlist = await Playlist.findById(id);
-      
+
       if (!playlist) {
         return res.status(404).json({ error: 'Playlist not found' });
       }
-      
+
       res.json(playlist);
     } catch (error) {
       console.error('Get playlist error:', error);
@@ -88,16 +88,16 @@ class PlaylistController {
       console.log('Request body keys:', Object.keys(req.body || {}));
       console.log('Request body:', req.body);
       console.log('Request file:', req.file ? 'File present' : 'No file');
-      
+
       // Handle both JSON and multipart form data
       let playlistData;
-      
+
       // Check if req.body exists and has data
       if (!req.body || Object.keys(req.body).length === 0) {
         console.log('Request body is empty, checking raw body');
         return res.status(400).json({ error: 'Request body is empty' });
       }
-      
+
       if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
         // For multipart requests (cover image uploads), get data from req.body
         playlistData = {
@@ -116,30 +116,30 @@ class PlaylistController {
         console.log('Parsed multipart data:', playlistData);
       } else {
         // For JSON requests - direct destructuring
-        const { 
-          name, 
-          description, 
-          subject, 
-          department, 
-          academicYear, 
-          classSection, 
-          visibility, 
-          status, 
-          isPublic, 
+        const {
+          name,
+          description,
+          subject,
+          department,
+          academicYear,
+          classSection,
+          visibility,
+          status,
+          isPublic,
           coverUrl,
-          userId 
+          userId
         } = req.body;
-        
+
         playlistData = {
-          name, 
-          description, 
-          subject, 
-          department, 
-          academicYear, 
-          classSection, 
-          visibility, 
-          status, 
-          isPublic, 
+          name,
+          description,
+          subject,
+          department,
+          academicYear,
+          classSection,
+          visibility,
+          status,
+          isPublic,
           coverUrl,
           userId
         };
@@ -156,15 +156,15 @@ class PlaylistController {
 
       // Handle visibility and approval logic
       const userRole = req.user.academic_role || req.user.role;
-      
+
       if (playlistData.visibility === 'CLASS') {
         // Validate academic fields for class-specific playlists
         if (!playlistData.department || !playlistData.academicYear || !playlistData.classSection) {
-          return res.status(400).json({ 
-            error: 'Department, academic year, and class section are required for class-specific playlists' 
+          return res.status(400).json({
+            error: 'Department, academic year, and class section are required for class-specific playlists'
           });
         }
-        
+
         // Class playlists require teacher approval for students
         if (userRole !== 'TEACHER' && userRole !== 'creator' && userRole !== 'admin') {
           playlistData.status = 'DRAFT';
@@ -188,7 +188,7 @@ class PlaylistController {
       if (req.file && req.file.buffer) {
         try {
           const coverKey = `covers/${userId}/${Date.now()}-cover.jpg`;
-          
+
           // Upload buffer directly to S3
           const uploadResult = await s3Service.uploadFile(
             req.file.buffer,
@@ -234,14 +234,14 @@ class PlaylistController {
       console.log('Playlist ID:', id);
       console.log('Playlist ID type:', typeof id);
       console.log('Playlist ID length:', id ? id.length : 'undefined');
-      
+
       const tracks = await PlaylistTrack.findByPlaylist(id);
       console.log('Tracks found:', tracks?.length || 0);
-      
+
       if (tracks && tracks.length > 0) {
         console.log('First track:', tracks[0].title);
       }
-      
+
       res.json(tracks);
     } catch (error) {
       console.error('Get playlist tracks error:', error);
@@ -328,33 +328,34 @@ class PlaylistController {
 
       const userRole = req.user.academic_role || req.user.role;
       const userDepartment = req.user.department;
-      
-      console.log('Get pending approval - User role:', userRole, 'Department:', userDepartment);
-      
+
+      console.log('=== PENDING APPROVAL DEBUG ===');
+      console.log('User ID:', req.user.id);
+      console.log('User role:', userRole);
+      console.log('User department:', userDepartment);
+
       // Only teachers can view pending playlists
       if (userRole !== 'TEACHER' && userRole !== 'creator' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Teacher access required.' });
       }
-      
+
       let playlists;
       if (userRole === 'admin') {
         // Admin can see all pending playlists
         console.log('Admin user - fetching all pending playlists');
         playlists = await Playlist.findPendingApproval();
-      } else if (userDepartment) {
-        // Teachers can only see pending playlists for their department
+      } else if (userDepartment && userDepartment.trim() !== '') {
+        // Teachers can only see pending playlists for their specific department
         console.log('Teacher with department - fetching playlists for department:', userDepartment);
         playlists = await Playlist.findPendingApprovalByDepartment(userDepartment);
       } else {
-        // Teacher with no department - show all pending playlists for testing
-        console.log('Teacher with no department - fetching all pending playlists for testing');
-        playlists = await Playlist.findPendingApproval();
+        // Teacher with no department assigned - they shouldn't see anything department-specific
+        console.log('Teacher with no department found in token. Access denied to pending content.');
+        playlists = [];
+        return res.status(403).json({ error: 'Your account must be assigned to a department to approve content.' });
       }
-      
-      console.log('Found pending playlists:', playlists.length);
-      if (playlists.length > 0) {
-        console.log('First playlist:', playlists[0].name, 'Department:', playlists[0].department);
-      }
+
+      console.log('Found pending playlists count:', playlists.length);
       res.json(playlists);
     } catch (error) {
       console.error('Get pending playlists error:', error);
@@ -367,40 +368,57 @@ class PlaylistController {
       const { id } = req.params;
       const userRole = req.user.academic_role || req.user.role;
       const userDepartment = req.user.department;
-      
+
+      console.log('=== APPROVE PLAYLIST DEBUG ===');
+      console.log('Teacher ID:', req.user.id);
+      console.log('Teacher role:', userRole);
+      console.log('Teacher department:', userDepartment);
+      console.log('Playlist ID to approve:', id);
+
       // Only teachers can approve playlists
       if (userRole !== 'TEACHER' && userRole !== 'creator' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Teacher access required.' });
       }
-      
+
       // Check if playlist exists and is pending
       const playlist = await Playlist.findById(id);
       if (!playlist) {
         return res.status(404).json({ error: 'Playlist not found' });
       }
-      
+
+      console.log('Playlist found. Department:', playlist.department, 'Moderation Status:', playlist.moderation_status);
+
       if (playlist.moderation_status !== 'PENDING') {
         return res.status(400).json({ error: 'Playlist is not pending approval' });
       }
-      
-      // Teachers can only approve playlists for their department (unless admin or no department)
-      if (userRole !== 'admin' && userDepartment && playlist.department !== userDepartment) {
-        console.log('Department mismatch: Teacher department =', userDepartment, 'Playlist department =', playlist.department);
-        return res.status(403).json({ error: 'You can only approve playlists for your department.' });
+
+      // Admin bypasses department check
+      if (userRole === 'admin') {
+        console.log('Admin bypassing department check');
+      } else {
+        // Teachers MUST have a department and it MUST match
+        if (!userDepartment || userDepartment.trim() === '') {
+          console.log('Approval denied: Teacher has no department assigned.');
+          return res.status(403).json({ error: 'Your account must be assigned to a department to approve content.' });
+        }
+
+        if (playlist.department !== userDepartment) {
+          console.log('Approval denied: Department mismatch. Teacher:', userDepartment, 'Playlist:', playlist.department);
+          return res.status(403).json({ error: `You can only approve playlists for the ${userDepartment} department.` });
+        }
       }
-      
+
       // Approve the playlist
-      console.log('Approving playlist:', id);
-      console.log('Current moderation_status:', playlist.moderation_status);
-      
+      console.log('Approval requirements met. Updating status...');
+
       const updatedPlaylist = await Playlist.update(id, {
         status: 'PUBLISHED',
         moderation_status: 'APPROVED',
         moderated_by: req.user.id,
         moderated_at: new Date().toISOString()
       });
-      
-      console.log('Updated playlist moderation_status:', updatedPlaylist?.moderation_status);
+
+      console.log('Update successful. New moderation status:', updatedPlaylist?.moderation_status);
       res.json(updatedPlaylist);
     } catch (error) {
       console.error('Approve playlist error:', error);
@@ -414,27 +432,27 @@ class PlaylistController {
       const { reason } = req.body;
       const userRole = req.user.academic_role || req.user.role;
       const userDepartment = req.user.department;
-      
+
       // Only teachers can reject playlists
       if (userRole !== 'TEACHER' && userRole !== 'creator' && userRole !== 'admin') {
         return res.status(403).json({ error: 'Teacher access required.' });
       }
-      
+
       // Check if playlist exists and is pending
       const playlist = await Playlist.findById(id);
       if (!playlist) {
         return res.status(404).json({ error: 'Playlist not found' });
       }
-      
+
       if (playlist.moderation_status !== 'PENDING') {
         return res.status(400).json({ error: 'Playlist is not pending approval' });
       }
-      
+
       // Teachers can only reject playlists for their department (unless admin or no department)
       if (userRole !== 'admin' && userDepartment && playlist.department !== userDepartment) {
         return res.status(403).json({ error: 'You can only reject playlists for your department.' });
       }
-      
+
       // Reject the playlist
       const updatedPlaylist = await Playlist.update(id, {
         status: 'DRAFT',
@@ -443,7 +461,7 @@ class PlaylistController {
         moderated_by: req.user.id,
         moderated_at: new Date().toISOString()
       });
-      
+
       res.json(updatedPlaylist);
     } catch (error) {
       console.error('Reject playlist error:', error);
@@ -470,8 +488,8 @@ class PlaylistController {
       // Additional validation for class-specific playlists
       if (updateData.visibility === 'CLASS') {
         if (!updateData.department || !updateData.academicYear || !updateData.classSection) {
-          return res.status(400).json({ 
-            error: 'Department, academic year, and class section are required for class-specific playlists' 
+          return res.status(400).json({
+            error: 'Department, academic year, and class section are required for class-specific playlists'
           });
         }
 
