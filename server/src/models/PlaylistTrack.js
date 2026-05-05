@@ -3,19 +3,32 @@ const database = require('../config/database');
 class PlaylistTrackModel {
   static async findByPlaylist(playlistId) {
     try {
-      const { data, error } = await database.getSupabaseClient()
+      // Step 1: Get all playlist_track rows for this playlist
+      const { data: playlistTracks, error: ptError } = await database.getSupabaseClient()
         .from('playlist_tracks')
-        .select(`
-          *,
-          tracks(*)
-        `)
+        .select('track_id, position')
         .eq('playlist_id', playlistId)
         .order('position', { ascending: true });
-      
-      if (error) throw error;
-      
-      // Extract track information
-      return data.map(item => item.tracks).filter(track => track);
+
+      if (ptError) throw ptError;
+      if (!playlistTracks || playlistTracks.length === 0) return [];
+
+      // Step 2: Fetch the actual track records by their IDs (no FK constraint needed)
+      const trackIds = playlistTracks.map(pt => pt.track_id);
+      const { data: tracks, error: tracksError } = await database.getSupabaseClient()
+        .from('tracks')
+        .select('*')
+        .in('id', trackIds);
+
+      if (tracksError) throw tracksError;
+      if (!tracks) return [];
+
+      // Return tracks in the correct playlist order
+      const trackMap = {};
+      tracks.forEach(t => { trackMap[t.id] = t; });
+      return playlistTracks
+        .map(pt => trackMap[pt.track_id])
+        .filter(Boolean);
     } catch (error) {
       console.error('Error finding tracks by playlist:', error);
       return [];

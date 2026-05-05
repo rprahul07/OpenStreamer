@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,10 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   displayName: text("display_name").notNull(),
   role: text("role").notNull().default("listener"),
+  academicRole: text("academic_role").default("STUDENT"),
+  department: text("department"),
+  academicYear: integer("academic_year"),
+  classSection: text("class_section"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
 });
@@ -65,6 +69,16 @@ export const playlists = pgTable("playlists", {
   name: text("name").notNull(),
   description: text("description"),
   userId: text("user_id").notNull(),
+  subject: text("subject"),
+  department: text("department"),
+  academicYear: integer("academic_year"),
+  classSection: text("class_section"),
+  visibility: text("visibility").default("PUBLIC"),
+  status: text("status").default("PUBLISHED"),
+  moderationStatus: text("moderation_status").default("APPROVED"),
+  moderatedBy: text("moderated_by"),
+  moderatedAt: text("moderated_at"),
+  moderationReason: text("moderation_reason"),
   isPublic: text("is_public", { enum: ["true", "false"] }).default("false"),
   coverUrl: text("cover_url"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),

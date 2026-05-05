@@ -52,7 +52,16 @@ export default function LibraryScreen() {
 
       // Class-specific playlists
       if (playlist.visibility === 'CLASS') {
-        // Only show if user matches class criteria
+        // Teachers, creators, and admins can see class playlists
+        if (user.academicRole === 'TEACHER' || user.role === 'admin' || user.role === 'creator') {
+          // If teacher has a department, maybe filter by it (or just show all approved class playlists they got from the backend)
+          if (user.department) {
+            return user.department === playlist.department;
+          }
+          return true;
+        }
+
+        // For students, strictly enforce exact class match
         return (
           user.department === playlist.department &&
           user.academicYear === playlist.academicYear &&

@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Playlist, DEFAULT_PLAYLISTS, DEFAULT_TRACKS, Track } from '@/lib/data';
-import { searchPlaylists } from '@/lib/storage';
+import { getPlaylists } from '@/lib/playlist-api';
 import { usePlayer } from '@/contexts/PlayerContext';
 import { useBranding } from '@/contexts/BrandingContext';
 import MiniPlayer from '@/components/MiniPlayer';
@@ -44,9 +44,19 @@ export default function SearchScreen() {
     }
     setSearching(true);
     setHasSearched(true);
-    const playlists = await searchPlaylists(text.trim());
-    setResults(playlists);
+    
+    // Fetch all accessible playlists from server
+    const allPlaylists = await getPlaylists();
     const q = text.toLowerCase();
+    
+    // Filter locally (backend only returns what the user is allowed to see anyway)
+    const filteredPlaylists = allPlaylists.filter(p => 
+      p.name.toLowerCase().includes(q) ||
+      (p.description && p.description.toLowerCase().includes(q))
+    );
+    
+    setResults(filteredPlaylists);
+    
     const tracks = DEFAULT_TRACKS.filter(
       t => t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q)
     );

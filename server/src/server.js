@@ -247,7 +247,6 @@ async function startServer() {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`🚀 Stream Curator Academic Platform server serving on port ${port}`);

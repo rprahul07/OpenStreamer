@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { API_CONFIG } from './config';
 
 export interface UploadTrackRequest {
@@ -111,12 +112,18 @@ export async function uploadTrack(trackData: UploadTrackRequest): Promise<TrackR
 
     // Add the audio file
     if (trackData.fileUri) {
-      const audioFile = {
-        uri: trackData.fileUri,
-        type: 'audio/mpeg',
-        name: `${trackData.title.replace(/\s+/g, '_')}.mp3`,
-      };
-      formData.append('audioFile', audioFile as any);
+      if (Platform.OS === 'web') {
+        const fetchResponse = await fetch(trackData.fileUri);
+        const blob = await fetchResponse.blob();
+        formData.append('audioFile', blob, `${trackData.title.replace(/\s+/g, '_')}.mp3`);
+      } else {
+        const audioFile = {
+          uri: trackData.fileUri,
+          type: 'audio/mpeg',
+          name: `${trackData.title.replace(/\s+/g, '_')}.mp3`,
+        };
+        formData.append('audioFile', audioFile as any);
+      }
     }
 
     const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.TRACKS.UPLOAD}`, {

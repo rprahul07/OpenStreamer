@@ -5,6 +5,7 @@ const playlistRoutes = require('./playlists');
 const moderationRoutes = require('./moderation');
 const interactionRoutes = require('./interactions');
 const settingsRoutes = require('./settings');
+const convertRoutes = require('./convert');
 
 function setupRoutes(app) {
   console.log('=== SETTING UP ROUTES ===');
@@ -17,6 +18,7 @@ function setupRoutes(app) {
   app.use('/api/moderation', moderationRoutes);
   app.use('/api/interactions', interactionRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/convert', convertRoutes);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {

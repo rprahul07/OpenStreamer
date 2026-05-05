@@ -28,6 +28,10 @@ function NativeTabLayout() {
           <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} md="add-circle-outline" />
           <Label>Upload</Label>
         </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="converter">
+          <Icon sf={{ default: "arrow.triangle.2.circlepath", selected: "arrow.triangle.2.circlepath" }} md="sync" />
+          <Label>Convert</Label>
+        </NativeTabs.Trigger>
         <NativeTabs.Trigger name="approval">
           <Icon sf={{ default: "checkmark.circle", selected: "checkmark.circle.fill" }} md="checkmark-circle-outline" />
           <Label>Approval</Label>
@@ -104,6 +108,15 @@ function ClassicTabLayout() {
           title: "Upload",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "add-circle" : "add-circle-outline"} size={22} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="converter"
+        options={{
+          title: "Convert",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "sync-circle" : "sync-circle-outline"} size={22} color={color} />
           ),
         }}
       />

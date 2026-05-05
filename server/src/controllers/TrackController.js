@@ -33,8 +33,8 @@ class TrackController {
       if (req.user && (req.user.academic_role === 'STUDENT' || req.user.role === 'listener')) {
         tracks = await TrackModel.findForStudents({
           department: req.user.department,
-          academicYear: req.user.academicYear,
-          classSection: req.user.classSection
+          academicYear: req.user.academic_year,
+          classSection: req.user.class_section
         });
       } else {
         // Teachers and admins can see all content

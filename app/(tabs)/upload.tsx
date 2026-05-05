@@ -192,13 +192,19 @@ export default function UploadScreen() {
       });
 
       // Add cover image if selected
-      if (coverUri && coverUri.startsWith('file://')) {
-        const coverFile = {
-          uri: coverUri,
-          type: 'image/jpeg',
-          name: `cover_${Date.now()}.jpg`,
-        };
-        formData.append('coverImage', coverFile as any);
+      if (coverUri) {
+        if (Platform.OS === 'web') {
+          const fetchResponse = await fetch(coverUri);
+          const blob = await fetchResponse.blob();
+          formData.append('coverImage', blob, `cover_${Date.now()}.jpg`);
+        } else if (coverUri.startsWith('file://')) {
+          const coverFile = {
+            uri: coverUri,
+            type: 'image/jpeg',
+            name: `cover_${Date.now()}.jpg`,
+          };
+          formData.append('coverImage', coverFile as any);
+        }
       }
 
       // Create playlist with FormData (handles both cover upload and playlist creation)
